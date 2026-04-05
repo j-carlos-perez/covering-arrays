@@ -1,11 +1,12 @@
 CC = gcc
-CFLAGS = -Wall -Wextra
+CFLAGS = -Wall -Wextra -I.
 
-SRC = utl/memory.c utl/combinatorial.c ops/validator.c
+SRC = utl/memory.c utl/combinatorial.c covering_array.c ops/validator.c
 OBJ = $(SRC:.c=.o)
 TARGET = validator
 
 UTL_OBJ = utl/memory.o utl/combinatorial.o
+CA_OBJ = covering_array.o
 
 TEST_SRC = test/test_combinatorial.c test/unity.c
 TEST_OBJ = $(TEST_SRC:.c=.o)
