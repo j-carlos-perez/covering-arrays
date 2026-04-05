@@ -3,8 +3,9 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
-#include "utl/memory.h"
-#include "utl/combinatorial.h"
+#include "lib/memory.h"
+#include "lib/combinatorial.h"
+#include "lib/covering_array.h"
 
 char PATH[100], ARCHIVE[100];
 int ROWIN, ROWOUT, EXCLUDE;
@@ -163,28 +164,20 @@ int main(int argc, char const *argv[])
         readme(argv[0]);
         exit(-1);
     }
-    FILE *FP;
-    FP = fopen(ARCHIVE, "r");
-    if (FP == NULL) {
+
+    covering_array_t *ca = ca_load(ARCHIVE);
+    if (ca == NULL) {
         fprintf(stderr, "Error reading '%s' file\n", ARCHIVE);
         exit(-1);
     }
-    long pointer = ftell(FP);
-    while (fgets(cadena, line_size, FP) != NULL) {
-        if (cadena[0] != 'C' && cadena[0] != 'c') {
-            break;
-        }
-        pointer = ftell(FP);
-    }
-    fseek(FP, pointer, SEEK_SET);
-    fscanf(FP, "%d %d %d ^ %d %d", &N, &k, &v, &k, &t);
+
+    N = ca->N;
+    k = ca->k;
+    v = ca->v;
+    t = ca->t;
+    pCA = ca->matrix;
+
     fprintf(stderr, "CA(%d;%d,%d,%d)\n", N, t, k, v);
-    pCA = get_matrix(N, k);
-    for (i = 0; i < N; ++i) {
-        for (j = 0; j < k; ++j) {
-            fscanf(FP, "%d", &pCA[i][j]);
-        }
-    }
 
     R = binomial(k, t);
     C = pow(v, t);
@@ -264,44 +257,47 @@ int main(int argc, char const *argv[])
     }
 
     N = N + ROWOUT - ROWIN;
-    char salida[100];
 
-    sprintf(salida, "%sN%dk%dv%d^%dt%d.ca.missing%d", PATH, N, k, v, k, t, min);
-    fprintf(stderr, "%s\n", salida);
-
-    FILE *FP2;
-    FP2 = fopen(salida, "w");
-    if (FP2 == NULL) {
-        fprintf(stderr, "Error escribiendo %s archivo\n", salida);
+    covering_array_t *ca_out = ca_create(N, ca->k, ca->v, ca->t);
+    if (ca_out == NULL) {
+        fprintf(stderr, "Error: failed to create output covering array\n");
+        ca_destroy(ca);
         exit(-1);
     }
 
-    fprintf(FP2, "C Generado mediante merge ROW greedy\n");
-    fprintf(FP2, "%d %d %d ^ %d %d\n", N, k, v, k, t);
-    for (i = 0; i < N - (ROWOUT - ROWIN); ++i) {
+    int out_row = 0;
+    for (i = 0; i < ca->N; ++i) {
         if (print[i] == 1) {
-            for (j = 0; j < k; ++j) {
-                fprintf(FP2, "%d ", pCA[i][j]);
+            for (j = 0; j < ca->k; ++j) {
+                ca_out->matrix[out_row][j] = ca->matrix[i][j];
             }
-            fprintf(FP2, "\n");
+            out_row++;
         }
     }
 
     for (i = 0; i < ROWOUT; ++i) {
-        for (j = 0; j < k; ++j) {
-            fprintf(FP2, "%d ", best[i][j]);
+        for (j = 0; j < ca->k; ++j) {
+            ca_out->matrix[out_row][j] = best[i][j];
         }
-        fprintf(FP2, "\n");
+        out_row++;
     }
-    fclose(FP2);
+
+    int save_result = ca_save(PATH, ca_out, "Generado mediante merge ROW greedy", min);
+    if (save_result != 0) {
+        fprintf(stderr, "Error: failed to save output file\n");
+    }
 
     fprintf(stderr, "minimal is %d using %d gtp\n", min, selected);
+
+    ca_destroy(ca_out);
+    ca_destroy(ca);
+
     free_matrix(current, ROWOUT);
     free_matrix(best, ROWOUT);
     free_matrix(M, nocovered + ROWIN * KC);
     free_matrix(IToR, NC);
     free_matrix(IToC, KC);
-    free_matrix(pCA, N);
     free_matrix(P, R);
+
     return 0;
 }

@@ -1,6 +1,6 @@
 #include "unity.h"
-#include "../utl/combinatorial.h"
-#include "../utl/memory.h"
+#include "../lib/combinatorial.h"
+#include "../lib/memory.h"
 #include <stdlib.h>
 
 void setUp(void) {}
