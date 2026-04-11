@@ -1,0 +1,6 @@
+CompileFlags:
+  Add:
+    - "-I/Users/carlosperez/Developer/covering-arrays"
+    - "-I/Users/carlosperez/Developer/covering-arrays/lib"
+    - "-Wall"
+    - "-Wextra"

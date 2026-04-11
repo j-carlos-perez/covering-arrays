@@ -24,7 +24,10 @@ int ca_save(const char *folder_path, covering_array_t *ca, const char *comment, 
 void ca_print(covering_array_t *ca);
 int ca_add_row(covering_array_t *ca, const int *row);
 int ca_init_random(covering_array_t *ca);
+int ca_init_random_balanced(covering_array_t *ca);
 int ca_init_rotation_position(covering_array_t *ca);
+int ca_init_rotation_position_balanced(covering_array_t *ca);
 int ca_init_rotation_full(covering_array_t *ca);
+int ca_init_rotation_full_balanced(covering_array_t *ca);
 
 #endif

@@ -140,33 +140,48 @@ int main(int argc, char *argv[])
     int **IToC = get_matrix((int)R, ca->t);
     t_wise(IToC, ca->k, ca->t);
 
-    printf("\n=== Selecting random change set ===\n");
-    int row_idx = rand() % ca->N;
-    uint16_t change_set_idx = (uint16_t)(rand() % (int)R);
-    printf("Picked row %d, change set %u\n", row_idx, change_set_idx);
-
-    printf("\n=== Finding best values for t-columns ===\n");
-    int *best_values = malloc(ca->t * sizeof(int));
-    ssize_t delta;
-    if (find_best_values_for_tcolumns(ca, pre, IToC, row_idx, change_set_idx, best_values, &delta) != 0) {
-        fprintf(stderr, "Error: failed to find best values\n");
-        free(best_values);
-        precompute_destroy(pre);
-        ca_destroy(ca);
-        free_matrix(IToC, (int)R);
-        return 1;
+    int best_row_idx = 0;
+    printf("\n=== Testing all rows and change sets ===\n");
+    ssize_t best_overall_delta = 0;
+    uint16_t best_change_set_idx = 0;
+    int *best_overall_values = malloc(ca->t * sizeof(int));
+    
+    for (int r = 0; r < ca->N; r++) {
+        for (uint16_t cs = 0; cs < R; cs++) {
+            int *test_values = malloc(ca->t * sizeof(int));
+            ssize_t test_delta;
+            if (find_best_values_for_tcolumns(ca, pre, IToC, r, cs, test_values, &test_delta) == 0) {
+                if (test_delta > best_overall_delta) {
+                    best_overall_delta = test_delta;
+                    best_row_idx = r;
+                    best_change_set_idx = cs;
+                    for (int j = 0; j < ca->t; j++) {
+                        best_overall_values[j] = test_values[j];
+                    }
+                }
+            }
+            free(test_values);
+        }
+        if (r % 100 == 0) printf("  Processed row %d / %d\n", r, ca->N);
     }
 
-    if (delta > 0) {
+    printf("\nBest: row %d, change set %u, delta %zd\n", best_row_idx, best_change_set_idx, best_overall_delta);
+    printf("Best values: {");
+    for (int j = 0; j < ca->t; j++) {
+        printf("%d%s", best_overall_values[j], j < ca->t - 1 ? "," : "");
+    }
+    printf("}\n");
+
+    if (best_overall_delta > 0) {
         printf("\n=== Applying change ===\n");
-        ca_apply_tcolumns_change(ca, pre, IToC, row_idx, change_set_idx, best_values);
+        ca_apply_tcolumns_change(ca, pre, IToC, best_row_idx, best_change_set_idx, best_overall_values);
         printf("Coverage after change: %zu / %zu (%.1f%%)\n", ca->covered, ca->total,
                100.0 * (double)ca->covered / (double)ca->total);
     } else {
         printf("\nNo improvement found, skipping change.\n");
     }
 
-    free(best_values);
+    free(best_overall_values);
 
     printf("\n=== Sanity Check ===\n");
     covering_array_t *ca_verify = ca_create(ca->N, ca->k, ca->v, ca->t);

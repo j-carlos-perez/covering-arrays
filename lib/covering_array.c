@@ -7,6 +7,78 @@
 
 #define CA_GROWTH_FACTOR 10
 
+static int ca_init_balanced_quotas(int *quotas, int v, int k)
+{
+    int base = k / v;
+    int remainder = k % v;
+
+    for (int i = 0; i < v; i++) {
+        quotas[i] = base;
+    }
+
+    int *symbols = malloc((size_t)v * sizeof(int));
+    if (symbols == NULL) {
+        return -1;
+    }
+
+    for (int i = 0; i < v; i++) {
+        symbols[i] = i;
+    }
+
+    for (int i = v - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        int tmp = symbols[i];
+        symbols[i] = symbols[j];
+        symbols[j] = tmp;
+    }
+
+    for (int i = 0; i < remainder; i++) {
+        quotas[symbols[i]]++;
+    }
+
+    free(symbols);
+    return 0;
+}
+
+static int ca_fill_balanced_row(int *row, int k, int v)
+{
+    int *remaining = malloc((size_t)v * sizeof(int));
+    if (remaining == NULL) {
+        return -1;
+    }
+
+    if (ca_init_balanced_quotas(remaining, v, k) != 0) {
+        free(remaining);
+        return -1;
+    }
+
+    for (int col = 0; col < k; col++) {
+        int slots_left = k - col;
+        int pick = rand() % slots_left;
+        int cumulative = 0;
+        int selected_symbol = -1;
+
+        for (int symbol = 0; symbol < v; symbol++) {
+            cumulative += remaining[symbol];
+            if (pick < cumulative) {
+                selected_symbol = symbol;
+                break;
+            }
+        }
+
+        if (selected_symbol < 0) {
+            free(remaining);
+            return -1;
+        }
+
+        row[col] = selected_symbol;
+        remaining[selected_symbol]--;
+    }
+
+    free(remaining);
+    return 0;
+}
+
 covering_array_t *ca_create(int N, int k, int v, int t)
 {
     covering_array_t *ca = malloc(sizeof(covering_array_t));
@@ -266,6 +338,21 @@ int ca_init_random(covering_array_t *ca)
     return 0;
 }
 
+int ca_init_random_balanced(covering_array_t *ca)
+{
+    if (ca == NULL || ca->matrix == NULL) {
+        return -1;
+    }
+
+    for (int i = 0; i < ca->N; i++) {
+        if (ca_fill_balanced_row(ca->matrix[i], ca->k, ca->v) != 0) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 int ca_init_rotation_position(covering_array_t *ca)
 {
     if (ca == NULL || ca->matrix == NULL) {
@@ -290,6 +377,30 @@ int ca_init_rotation_position(covering_array_t *ca)
     return 0;
 }
 
+int ca_init_rotation_position_balanced(covering_array_t *ca)
+{
+    if (ca == NULL || ca->matrix == NULL) {
+        return -1;
+    }
+
+    if (ca->N != ca->k) {
+        fprintf(stderr, "Error: N (%d) must equal k (%d) for position rotation\n", ca->N, ca->k);
+        return -1;
+    }
+
+    if (ca_fill_balanced_row(ca->matrix[0], ca->k, ca->v) != 0) {
+        return -1;
+    }
+
+    for (int i = 1; i < ca->N; i++) {
+        for (int j = 0; j < ca->k; j++) {
+            ca->matrix[i][j] = ca->matrix[0][(j - i + ca->k) % ca->k];
+        }
+    }
+
+    return 0;
+}
+
 int ca_init_rotation_full(covering_array_t *ca)
 {
     if (ca == NULL || ca->matrix == NULL) {
@@ -303,6 +414,31 @@ int ca_init_rotation_full(covering_array_t *ca)
 
     for (int j = 0; j < ca->k; j++) {
         ca->matrix[0][j] = rand() % ca->v;
+    }
+
+    for (int i = 1; i < ca->N; i++) {
+        for (int j = 0; j < ca->k; j++) {
+            int shifted = ca->matrix[0][(j - i + ca->k) % ca->k];
+            ca->matrix[i][j] = (shifted + i) % ca->v;
+        }
+    }
+
+    return 0;
+}
+
+int ca_init_rotation_full_balanced(covering_array_t *ca)
+{
+    if (ca == NULL || ca->matrix == NULL) {
+        return -1;
+    }
+
+    if (ca->N != ca->k) {
+        fprintf(stderr, "Error: N (%d) must equal k (%d) for full rotation\n", ca->N, ca->k);
+        return -1;
+    }
+
+    if (ca_fill_balanced_row(ca->matrix[0], ca->k, ca->v) != 0) {
+        return -1;
     }
 
     for (int i = 1; i < ca->N; i++) {
