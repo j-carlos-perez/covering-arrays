@@ -1,7 +1,15 @@
 # Build artifacts
 *.o
-validator
+
+# Executables
+dump
+gen_ca
+gen_ca_optimized
 test_runner
+validator
+sweep.sh
+examples/optimize_*
+examples/update_coverage
 
 # Editor/IDE
 .vscode/
