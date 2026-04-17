@@ -12,30 +12,23 @@ void pv_validate(covering_array_t *ca) {
     for (int i = 0; i < ca->t; i++)
         C *= (size_t)ca->v;
 
+    int num_threads = omp_get_max_threads();
+
     int **IToC = get_matrix((int)R, ca->t);
     t_wise(IToC, ca->k, ca->t);
 
     if (ca->P == NULL) {
-        ca->P = get_matrix_uint8(R, C);
+        ca->P = get_matrix_uint8_calloc(R, C);
         if (ca->P == NULL) {
             free_matrix(IToC, (int)R);
             return;
         }
     }
 
-    for (size_t i = 0; i < R; i++) {
-        for (size_t j = 0; j < C; j++) {
-            ca->P[i][j] = 0;
-        }
-    }
-
-    int num_threads = omp_get_max_threads();
-
 #pragma omp parallel num_threads(num_threads)
     {
-        size_t tid = (size_t)omp_get_thread_num();
         size_t chunk_size = (R + omp_get_num_threads() - 1) / omp_get_num_threads();
-        size_t start = tid * chunk_size;
+        size_t start = (size_t)omp_get_thread_num() * chunk_size;
         size_t end = start + chunk_size;
         if (end > R)
             end = R;
@@ -51,11 +44,10 @@ void pv_validate(covering_array_t *ca) {
     }
 
     size_t covered = 0;
+#pragma omp parallel for reduction(+:covered)
     for (size_t i = 0; i < R; i++) {
         for (size_t j = 0; j < C; j++) {
-            if (ca->P[i][j] > 0) {
-                covered++;
-            }
+            covered += (ca->P[i][j] > 0) ? 1 : 0;
         }
     }
 

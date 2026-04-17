@@ -9,6 +9,7 @@ void free_matrix(int **m, size_t r);
 void free_vector(int *v);
 
 uint8_t **get_matrix_uint8(size_t r, size_t c);
+uint8_t **get_matrix_uint8_calloc(size_t r, size_t c);
 void free_matrix_uint8(uint8_t **m, size_t r);
 
 #endif

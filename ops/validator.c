@@ -4,7 +4,7 @@
 #include <string.h>
 
 static void print_usage(const char *prog) {
-  fprintf(stderr, "Usage: %s -f <input_file> [-o <output_folder>]\n", prog);
+  fprintf(stderr, "Usage: %s -f <input_file> [-o <output_folder>] [-s]\n", prog);
   fprintf(stderr, "\n");
   fprintf(stderr, "Options:\n");
   fprintf(
@@ -13,6 +13,7 @@ static void print_usage(const char *prog) {
   fprintf(
       stderr,
       "  -o, --output <folder>  Save validated array to folder (optional)\n");
+  fprintf(stderr, "  -s, --silent           Suppress matrix printing\n");
   fprintf(stderr, "  -h, --help             Show this help message\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "Examples:\n");
@@ -25,10 +26,13 @@ int main(int argc, char *argv[]) {
   const char *input_file = NULL;
   const char *output_folder = NULL;
   int show_help = 0;
+  int silent = 0;
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
       show_help = 1;
+    } else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--silent") == 0) {
+      silent = 1;
     } else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--file") == 0) {
       if (i + 1 >= argc) {
         fprintf(stderr, "Error: missing value for %s\n\n", argv[i]);
@@ -67,7 +71,9 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  ca_print(ca);
+  if (!silent) {
+    ca_print(ca);
+  }
 
   int valid = ca_validate(ca);
   double coverage_pct =

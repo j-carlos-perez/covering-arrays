@@ -34,6 +34,15 @@ uint8_t **get_matrix_uint8(size_t r, size_t c) {
   return m;
 }
 
+uint8_t **get_matrix_uint8_calloc(size_t r, size_t c) {
+  uint8_t **m;
+  m = (uint8_t **)malloc(r * sizeof(uint8_t *));
+  for (size_t i = 0; i < r; i++) {
+    m[i] = calloc(c, sizeof(uint8_t));
+  }
+  return m;
+}
+
 void free_matrix_uint8(uint8_t **m, size_t r) {
   for (size_t i = 0; i < r; i++) {
     free(m[i]);

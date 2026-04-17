@@ -18,10 +18,21 @@ PV_TEST_SRC = test/test_parallel_validator.c test/unity.c
 PV_TEST_OBJ = $(PV_TEST_SRC:.c=.o)
 PV_TEST_BIN = test_parallel_runner
 
-all: $(TARGET)
+NON_TEST_BINS = validator dump gen_ca gen_ca_optimized validator_parallel \
+                examples/update_coverage examples/optimize_cell \
+                examples/optimize_cell_file examples/optimize_tcolumns \
+                examples/optimize_tcolumns_file
+
+TEST_BINS = $(TEST_BIN)
+
+all: $(NON_TEST_BINS)
+
+build: $(NON_TEST_BINS) $(LIB_OBJ) $(TEST_OBJ) $(PV_OBJ)
+	$(CC) $(CFLAGS) -o $(TEST_BIN) $(LIB_OBJ) $(TEST_OBJ)
+	@echo "NOTE: test_parallel_runner skipped (test/test_parallel_validator.c missing)"
 
 dump: dump.c $(LIB_OBJ)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ -lm
 
 $(TARGET): $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
@@ -64,9 +75,9 @@ examples/optimize_tcolumns_file: examples/optimize_tcolumns_file.c $(LIB_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 
 test_clean:
-	rm -f $(TEST_OBJ) $(TEST_BIN) $(PV_TEST_OBJ) $(PV_TEST_BIN)
+	rm -f $(TEST_OBJ) $(TEST_BIN)
 
 clean:
-	rm -f $(OBJ) $(TARGET) gen_ca gen_ca_optimized examples/update_coverage examples/optimize_cell examples/optimize_cell_file validator_parallel $(PV_OBJ)
+	rm -f $(OBJ) $(TARGET) gen_ca gen_ca_optimized examples/update_coverage examples/optimize_cell examples/optimize_cell_file validator_parallel $(PV_OBJ) $(TEST_BINS)
 
-.PHONY: all clean test test_clean dump examples pv_test
+.PHONY: all build clean test test_clean dump examples pv_test
