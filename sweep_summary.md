@@ -1,6 +1,7 @@
 # Covering Array Generation Sweep Results
 
 ## Test Parameters
+
 - t: [2, 3, 4, 5]
 - v: [2, 3, 4]
 - k: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
@@ -12,7 +13,7 @@
 ### Best Method by Configuration
 
 | t | v | Best Method | Notes |
-|---|---|-----------|-------|
+| - | - | --------- | ----- |
 | 2 | 2 | position/full | 100% coverage reachable with N=k |
 | 2 | 3 | random | ~70-80% typical |
 | 2 | 4 | random | ~60-70% typical |
@@ -23,9 +24,9 @@
 
 ### Average Coverage % by (t,v)
 
-| t | v=2 | v=3 | v=4 |
-|----|-----|-----|-----|
-| random | 70.7% | 64.7% | 66.0% |
+| t | method | v=2 | v=3 | v=4 |
+| - | ------ | --- | --- | --- |
+| 2 | random | 70.7% | 64.7% | 66.0% |
 | 2 | position | 96.7% | 70.1% | 43.4% |
 | 2 | full | 94.8% | 71.5% | 47.2% |
 | 3 | random | 66.7% | 63.6% | 63.7% |
@@ -42,3 +43,4 @@
 ## Full Data
 
 See sweep_results.csv for all 396 configurations.
+
