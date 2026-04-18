@@ -18,11 +18,11 @@ CA(4; 2, 3, 2) = \begin{bmatrix}
 0 & 0 & 0 \\
 0 & 1 & 1 \\
 1 & 0 & 0 \\
-1 & 1 & 1
+1 & 1 & 1 \\
 \end{bmatrix}
 $$
 
-With $t=2$, consider columns (0,1): the four possible pairs $(0,0), (0,1), (1,0), (1,1)$ all appear in some row. The same holds for columns (0,2) and (1,2).
+With $t=2$, consider columns (0,1): the four possible pairs $(0,0), (0,1), (1,0), (1,1)$ all appear in some row. The same holds for columns $(0,2)$ and $(1,2)$.
 
 ## Example: Ternary (v = 3)
 
@@ -36,7 +36,7 @@ CA(9; 2, 3, 3) = \begin{bmatrix}
 1 & 2 & 0 \\
 2 & 0 & 2 \\
 2 & 1 & 0 \\
-2 & 2 & 1
+2 & 2 & 1 \\
 \end{bmatrix}
 $$
 
@@ -45,3 +45,4 @@ With $v=3$ and $t=2$, each pair of columns must contain all $3^2 = 9$ possible c
 ## Project
 
 This repository contains implementations for working with covering arrays, including combinatorial utilities and verification tools.
+
