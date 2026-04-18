@@ -1,6 +1,14 @@
-CC = gcc
-CFLAGS = -Wall -Wextra -I. -fopenmp -O3 -march=native -flto
-LDFLAGS = -fopenmp -flto
+UNAME_S := $(shell uname -s)
+
+ifeq ($(UNAME_S),Darwin)
+    CC = clang
+    CFLAGS = -Wall -Wextra -I. -I/opt/homebrew/opt/libomp/include -Xclang -fopenmp -O3 -march=native -flto
+    LDFLAGS = -Xclang -fopenmp -flto -L/opt/homebrew/opt/libomp/lib -lomp
+else
+    CC = gcc
+    CFLAGS = -Wall -Wextra -I. -fopenmp -O3 -march=native -flto
+    LDFLAGS = -fopenmp -flto
+endif
 
 SRC = lib/memory.c lib/combinatorial.c lib/covering_array.c lib/precompute.c lib/local_calculation.c lib/t_columns_delta.c lib/pair_diversity.c ops/validator.c
 OBJ = $(SRC:.c=.o)
