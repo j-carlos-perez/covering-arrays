@@ -14,7 +14,7 @@ SRC = lib/memory.c lib/combinatorial.c lib/covering_array.c lib/precompute.c lib
 OBJ = $(SRC:.c=.o)
 TARGET = validator
 
-LIB_OBJ = lib/memory.o lib/combinatorial.o lib/covering_array.o lib/precompute.o lib/local_calculation.o lib/t_columns_delta.o lib/pair_diversity.o
+LIB_OBJ = lib/memory.o lib/combinatorial.o lib/covering_array.o lib/precompute.o lib/local_calculation.o lib/t_columns_delta.o lib/pair_diversity.o lib/set64.o
 
 PV_OBJ = lib/parallel_validator.o
 
