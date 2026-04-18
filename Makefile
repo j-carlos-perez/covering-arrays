@@ -18,11 +18,11 @@ LIB_OBJ = lib/memory.o lib/combinatorial.o lib/covering_array.o lib/precompute.o
 
 PV_OBJ = lib/parallel_validator.o
 
-TEST_SRC = test/test_combinatorial.c test/unity.c
+TEST_SRC = unittests/test_combinatorial.c unittests/unity.c
 TEST_OBJ = $(TEST_SRC:.c=.o)
 TEST_BIN = test_runner
 
-PV_TEST_SRC = test/test_parallel_validator.c test/unity.c
+PV_TEST_SRC = unittests/test_parallel_validator.c unittests/unity.c
 PV_TEST_OBJ = $(PV_TEST_SRC:.c=.o)
 PV_TEST_BIN = test_parallel_runner
 
@@ -37,7 +37,7 @@ all: $(NON_TEST_BINS)
 
 build: $(NON_TEST_BINS) $(LIB_OBJ) $(TEST_OBJ) $(PV_OBJ)
 	$(CC) $(CFLAGS) -o $(TEST_BIN) $(LIB_OBJ) $(TEST_OBJ)
-	@echo "NOTE: test_parallel_runner skipped (test/test_parallel_validator.c missing)"
+	@echo "NOTE: test_parallel_runner skipped (unittests/test_parallel_validator.c missing)"
 
 dump: dump.c $(LIB_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ -lm
