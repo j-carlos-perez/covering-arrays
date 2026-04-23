@@ -117,7 +117,7 @@ void inv_ruffini(int *V, int num, int v, int t) {
   }
 }
 
-int get_col(int *line, int **IToC, int j, int t, int v) {
+int get_col(const int *line, int **IToC, int j, int t, int v) {
   int i, res = line[IToC[j][0]];
   if (res == v) {
     return -1;

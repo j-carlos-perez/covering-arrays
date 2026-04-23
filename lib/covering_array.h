@@ -12,6 +12,7 @@ typedef struct covering_array {
   int t;
   int **matrix;
   uint8_t **P;
+  size_t *tcomb_counter;
   size_t covered;
   size_t total;
 } covering_array_t;
@@ -24,6 +25,7 @@ int ca_save(const char *folder_path, covering_array_t *ca, const char *comment,
             int missing);
 void ca_print(covering_array_t *ca);
 int ca_add_row(covering_array_t *ca, const int *row);
+int ca_add_row_coverage(covering_array_t *ca, const int *row);
 int ca_init_random(covering_array_t *ca);
 int ca_init_random_balanced(covering_array_t *ca);
 int ca_init_rotation_position(covering_array_t *ca);

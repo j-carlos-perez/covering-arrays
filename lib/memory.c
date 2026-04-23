@@ -49,3 +49,19 @@ void free_matrix_uint8(uint8_t **m, size_t r) {
   }
   free(m);
 }
+
+uint8_t *get_vector_uint8(size_t r) {
+  return (uint8_t *)malloc(r * sizeof(uint8_t));
+}
+
+uint8_t *get_vector_uint8_calloc(size_t r) {
+  return (uint8_t *)calloc(r, sizeof(uint8_t));
+}
+
+void free_vector_uint8(uint8_t *v) { free(v); }
+
+size_t *get_vector_size_t(size_t r) {
+  return (size_t *)malloc(r * sizeof(size_t));
+}
+
+void free_vector_size_t(size_t *v) { free(v); }

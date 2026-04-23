@@ -5,7 +5,7 @@ void shuffle(int *array, int n);
 int binomial(int k, int r);
 int t_wise(int **GTP, int k, int t);
 void inv_ruffini(int *V, int num, int v, int t);
-int get_col(int *line, int **IToC, int j, int t, int v);
+int get_col(const int *line, int **IToC, int j, int t, int v);
 
 int **generate_t_combinations(int k, int t, int *out_n);
 

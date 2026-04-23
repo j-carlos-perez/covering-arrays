@@ -108,6 +108,7 @@ covering_array_t *ca_create(int N, int k, int v, int t) {
   }
 
   ca->P = NULL;
+  ca->tcomb_counter = NULL;
   ca->covered = 0;
   ca->total = 0;
 
@@ -126,6 +127,10 @@ void ca_destroy(covering_array_t *ca) {
   if (ca->P != NULL) {
     size_t R = binomial(ca->k, ca->t);
     free_matrix_uint8(ca->P, R);
+  }
+
+  if (ca->tcomb_counter != NULL) {
+    free_vector_size_t(ca->tcomb_counter);
   }
 
   free(ca);
@@ -313,6 +318,40 @@ int ca_add_row(covering_array_t *ca, const int *row) {
   }
 
   ca->N++;
+  return 0;
+}
+
+int ca_add_row_coverage(covering_array_t *ca, const int *row) {
+  if (ca == NULL || row == NULL) {
+    return -1;
+  }
+
+  size_t R = binomial(ca->k, ca->t);
+
+  if (ca->P == NULL) {
+    return -1;
+  }
+
+  if (ca->tcomb_counter == NULL) {
+    return -1;
+  }
+
+  int **IToC = get_matrix((int)R, ca->t);
+  t_wise(IToC, ca->k, ca->t);
+
+  for (size_t j = 0; j < R; j++) {
+    int c = get_col(row, IToC, (int)j, ca->t, ca->v);
+    if (c != -1) {
+      if (ca->P[j][c] == 0) {
+        ca->covered++;
+        ca->tcomb_counter[j]--;
+      }
+      ca->P[j][c]++;
+    }
+  }
+
+  free_matrix(IToC, (int)R);
+
   return 0;
 }
 

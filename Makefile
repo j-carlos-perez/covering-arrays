@@ -29,7 +29,7 @@ PV_TEST_BIN = test_parallel_runner
 NON_TEST_BINS = validator dump gen_ca gen_ca_optimized validator_parallel \
                 examples/update_coverage examples/optimize_cell \
                 examples/optimize_cell_file examples/optimize_tcolumns \
-                examples/optimize_tcolumns_file
+                examples/optimize_tcolumns_file extend_coverage
 
 TEST_BINS = $(TEST_BIN)
 
@@ -81,6 +81,9 @@ examples/optimize_tcolumns: examples/optimize_tcolumns.c $(LIB_OBJ)
 
 examples/optimize_tcolumns_file: examples/optimize_tcolumns_file.c $(LIB_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
+
+extend_coverage: extend_coverage.c $(LIB_OBJ) $(PV_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_clean:
 	rm -f $(TEST_OBJ) $(TEST_BIN)
