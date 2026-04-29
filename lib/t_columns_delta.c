@@ -3,6 +3,17 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+/*
+ * Computes the coverage delta when changing t columns in a row.
+ * 
+ * The change_set_idx selects which t columns to modify (from IToC matrix).
+ * new_vals contains the new values for those t columns.
+ * 
+ * The delta is the change in covered combinations (+1, 0, or -1).
+ * Does NOT modify the array - purely computational.
+ * 
+ * Returns the delta (change in ca->covered).
+ */
 ssize_t ca_compute_tcolumns_delta(covering_array_t *ca,
                                   const ca_affected_t *pre, int **IToC,
                                   int row_idx, uint16_t change_set_idx,
@@ -90,6 +101,15 @@ ssize_t ca_compute_tcolumns_delta(covering_array_t *ca,
   return delta;
 }
 
+/*
+ * Applies a t-column change and updates the coverage matrix P in place.
+ * 
+ * First computes the delta, then updates P matrix entries.
+ * The matrix row columns are updated at the end.
+ * The tcomb_counter field is NOT updated here.
+ * 
+ * Returns the delta (change in ca->covered).
+ */
 ssize_t ca_apply_tcolumns_change(covering_array_t *ca, const ca_affected_t *pre,
                                  int **IToC, int row_idx,
                                  uint16_t change_set_idx, const int *new_vals) {

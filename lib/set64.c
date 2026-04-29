@@ -1,6 +1,10 @@
 #include "set64.h"
 #include <string.h>
 
+/*
+ * Hash function using SplitMix64 - scrambles the key bits to improve distribution.
+ * Used for Robin Hood hashing probe sequence.
+ */
 static inline uint64_t mix64(uint64_t x) {
   x ^= x >> 33;
   x *= 0xff51afd7ed558ccdULL;
@@ -10,6 +14,11 @@ static inline uint64_t mix64(uint64_t x) {
   return x;
 }
 
+/*
+ * Fast 32-bit pseudo-random number generator using Xorshift.
+ * Uses a static internal state; NOT thread-safe.
+ * Returns values in range [0, UINT32_MAX].
+ */
 static inline uint32_t fast_rand_u32(void) {
   static uint64_t s = 88172645463325252ull;
   s ^= s << 13;
@@ -18,6 +27,10 @@ static inline uint32_t fast_rand_u32(void) {
   return (uint32_t)s;
 }
 
+/*
+ * Rounds up x to the next power of 2.
+ * Returns 1 if x <= 1, otherwise returns smallest pow(2, n) >= x.
+ */
 static inline uint32_t next_pow2_u32(uint32_t x) {
   if (x <= 1)
     return 1;
@@ -35,6 +48,16 @@ typedef struct {
   uint32_t index;
 } Entry;
 
+/*
+ * Creates a new Set64 hash set with Robin Hood probing.
+ * 
+ * Capacity is rounded up to powers of 2 for efficient modulo via mask.
+ * Table capacity is 2x the initial capacity (0.7 target load factor).
+ * Keys 0 and 1 are reserved as sentinels (EMPTY_KEY, DELETED_KEY).
+ * 
+ * Initial capacity is the expected number of elements in dense array.
+ * Caller must free with set64_free().
+ */
 Set64 *set64_create(uint32_t initial_capacity) {
   Set64 *s = (Set64 *)malloc(sizeof(Set64));
   if (!s)
@@ -63,6 +86,10 @@ Set64 *set64_create(uint32_t initial_capacity) {
   return s;
 }
 
+/*
+ * Frees all memory associated with the set.
+ * Handles NULL gracefully.
+ */
 void set64_free(Set64 *s) {
   if (!s)
     return;
@@ -71,6 +98,11 @@ void set64_free(Set64 *s) {
   free(s);
 }
 
+/*
+ * Doubles the hash table capacity and rehashes all entries.
+ * Used when load factor exceeds threshold.
+ * Robin Hood swapping preserves probe distance invariants.
+ */
 static void set64_rehash(Set64 *s) {
   uint32_t old_tcap = s->tcap;
   Set64Entry *old_tab = s->table;
@@ -123,6 +155,11 @@ static void set64_rehash(Set64 *s) {
   free(old_tab);
 }
 
+/*
+ * Inserts a key into the set using Robin Hood hashing.
+ * If the set is at capacity, automatically rehashing occurs.
+ * Duplicate keys are ignored.
+ */
 void set64_insert(Set64 *s, uint64_t key) {
   if (s->size >= s->max_fill) {
     set64_rehash(s);
@@ -162,6 +199,11 @@ void set64_insert(Set64 *s, uint64_t key) {
   }
 }
 
+/*
+ * Searches for a key in the hash table.
+ * Returns the position if found, or -1 if not found.
+ * Uses probe distance to terminate early when past home position.
+ */
 static int32_t set64_find(Set64 *s, uint64_t key) {
   uint32_t pos = mix64(key) & s->mask;
   uint32_t dist = 0;
@@ -185,6 +227,11 @@ static int32_t set64_find(Set64 *s, uint64_t key) {
   }
 }
 
+/*
+ * Removes a key from the set.
+ * Swaps the deleted entry with the last element in dense array to maintain consistency.
+ * Returns true if deleted, false if key was not found.
+ */
 bool set64_delete(Set64 *s, uint64_t key) {
   int32_t pos = set64_find(s, key);
   if (pos < 0)
@@ -204,6 +251,11 @@ bool set64_delete(Set64 *s, uint64_t key) {
   return true;
 }
 
+/*
+ * Returns a uniformly random element from the set.
+ * Uses fast_rand_u32() for sampling the dense array index.
+ * Returns SET64_EMPTY_KEY if the set is empty.
+ */
 uint64_t set64_random(Set64 *s) {
   if (s->size == 0)
     return SET64_EMPTY_KEY;

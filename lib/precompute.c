@@ -8,6 +8,18 @@
 #define MAX_MEMORY_GB 16
 #define MAX_MEMORY_BYTES (MAX_MEMORY_GB * 1024UL * 1024UL * 1024UL)
 
+/*
+ * Precomputes t-combination indices affected by column changes.
+ * 
+ * For each of the R = C(k,t) possible t-column sets, stores which IToC row
+ * indices are affected when those columns change values.
+ * 
+ * Also precomputes per-column mappings: for each column, which IToC rows contain it.
+ * This enables efficient incremental coverage updates.
+ * 
+ * Memory limit is 16 GB.
+ * Caller must free with precompute_destroy().
+ */
 ca_affected_t *precompute_create(size_t k, size_t t) {
   size_t R = binomial(k, t);
   size_t not_affected = binomial(k - t, t);
@@ -134,6 +146,10 @@ ca_affected_t *precompute_create(size_t k, size_t t) {
   return pre;
 }
 
+/*
+ * Frees all memory associated with the precomputation.
+ * Handles NULL gracefully.
+ */
 void precompute_destroy(ca_affected_t *pre) {
   if (pre == NULL)
     return;
@@ -143,6 +159,11 @@ void precompute_destroy(ca_affected_t *pre) {
   free(pre);
 }
 
+/*
+ * Returns a pointer to the affected IToC indices for a change set.
+ * change_set_idx selects which t columns (from IToC matrix).
+ * Returns NULL if index is out of bounds.
+ */
 const uint16_t *precompute_get_affected(const ca_affected_t *pre,
                                         size_t change_set_idx) {
   if (pre == NULL || change_set_idx >= pre->change_sets)
@@ -150,10 +171,19 @@ const uint16_t *precompute_get_affected(const ca_affected_t *pre,
   return &pre->indices[change_set_idx * pre->affected_per_change];
 }
 
+/*
+ * Returns the number of affected indices per change set.
+ * Equal to C(k,t) - C(k-t,t).
+ */
 size_t precompute_get_affected_count(const ca_affected_t *pre) {
   return pre ? pre->affected_per_change : 0;
 }
 
+/*
+ * Returns a pointer to the IToC indices affected by a single column.
+ * column is the column index [0, k-1].
+ * Returns NULL if column is out of bounds.
+ */
 const uint16_t *precompute_get_col_affected(const ca_affected_t *pre,
                                             size_t column) {
   if (pre == NULL || column >= pre->k)
@@ -161,6 +191,10 @@ const uint16_t *precompute_get_col_affected(const ca_affected_t *pre,
   return &pre->col_indices[pre->col_offsets[column]];
 }
 
+/*
+ * Returns the number of IToC indices affected per column.
+ * Equal to C(k-1, t-1).
+ */
 size_t precompute_get_col_affected_count(const ca_affected_t *pre) {
   if (pre == NULL)
     return 0;

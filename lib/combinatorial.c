@@ -3,12 +3,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/*
+ * Swaps two integers in place.
+ */
 static void swap_int(int *x, int *y) {
   int tmp = *x;
   *x = *y;
   *y = tmp;
 }
 
+/*
+ * Fills array with [0, n-1] and prints a shuffled permutation.
+ * Uses Fisher-Yates shuffle.
+ */
 void shuffle(int *array, int n) {
   for (int i = 0; i < n; ++i) {
     array[i] = i;
@@ -23,6 +30,10 @@ void shuffle(int *array, int n) {
   fprintf(stderr, "\n");
 }
 
+/*
+ * Computes binomial coefficient C(k, r) = k! / (r! * (k-r)!).
+ * Returns 0 if k < r.
+ */
 int binomial(int k, int r) {
   if (k < r) {
     return 0;
@@ -34,6 +45,11 @@ int binomial(int k, int r) {
   return b;
 }
 
+/*
+ * Generates all C(k,t) combinations of k columns taken t at a time.
+ * Each row of GTP contains t column indices (sorted ascending).
+ * Uses combinatorial generation algorithm.
+ */
 int t_wise(int **GTP, int k, int t) {
   int J[t];
   long long i, iMax, actual = 0;
@@ -70,6 +86,11 @@ int t_wise(int **GTP, int k, int t) {
   return 0;
 }
 
+/*
+ * Visits all C(k,t) column combinations, calling cb(J, actual, k, t, user_data)
+ * for each. Same as t_wise but uses a callback instead of filling a matrix.
+ * Returns the number of combinations generated.
+ */
 int t_wise_visit(int k, int t, t_combination_callback cb, void *user_data) {
   int J[t];
   long long i, iMax, actual = 0;
@@ -106,6 +127,11 @@ int t_wise_visit(int k, int t, t_combination_callback cb, void *user_data) {
   return actual;
 }
 
+/*
+ * Computes the base-v representation of num with t digits.
+ * Stores digits in V[0..t-1] (least significant first).
+ * Inverse of Ruffini's rule for encoding symbol tuples.
+ */
 void inv_ruffini(int *V, int num, int v, int t) {
   for (int i = 0; i < t; ++i) {
     V[i] = 0;
@@ -117,6 +143,13 @@ void inv_ruffini(int *V, int num, int v, int t) {
   }
 }
 
+/*
+ * Encodes a t-tuple from line using columns IToC[j].
+ *
+ * Reads t symbols from line at positions specified by IToC row j.
+ * Encodes as mixed-radix number: s[0]*v^(t-1) + ... + s[t-1].
+ * Returns -1 if any symbol equals v (wildcard found).
+ */
 int get_col(const int *line, int **IToC, int j, int t, int v) {
   int i, res = line[IToC[j][0]];
   if (res == v) {
@@ -131,6 +164,11 @@ int get_col(const int *line, int **IToC, int j, int t, int v) {
   return res;
 }
 
+/*
+ * Generates all C(k,t) column combinations and stores in a matrix.
+ * Calls t_wise() internally.
+ * Sets *out_n to the number of combinations if out_n != NULL.
+ */
 int **generate_t_combinations(int k, int t, int *out_n) {
   int n = binomial(k, t);
   int **GTP = get_matrix(n, t);
@@ -141,6 +179,9 @@ int **generate_t_combinations(int k, int t, int *out_n) {
   return GTP;
 }
 
+/*
+ * Comparison function for qsort.
+ */
 static int compare_int(const void *a, const void *b) {
   int ia = *(const int *)a;
   int ib = *(const int *)b;
@@ -151,10 +192,18 @@ static int compare_int(const void *a, const void *b) {
   return 0;
 }
 
+/*
+ * Initializes an array as a sorted permutation [0, 1, ..., n-1].
+ */
 void init_permutation(int *arr, int n) {
   qsort(arr, n, sizeof(int), compare_int);
 }
 
+/*
+ * Generates the next lexicographic permutation in place.
+ * Modifies arr to the next permutation.
+ * Returns 1 if more permutations exist, 0 if exhausted.
+ */
 int next_permutation(int *arr, int n) {
   if (n <= 1) {
     return 0;
@@ -190,12 +239,23 @@ int next_permutation(int *arr, int n) {
   return 1;
 }
 
+/*
+ * Initializes a Gray code sequence to all zeros.
+ */
 void init_gray_code(int *arr, int n) {
   for (int i = 0; i < n; i++) {
     arr[i] = 0;
   }
 }
 
+/*
+ * Generates the next Gray code in the sequence.
+ * Uses the standard algorithm: find rightmost mobile element, move it,
+ * then reverse direction of all elements to its right.
+ *
+ * Returns 1 if generated, 0 if all codes exhausted.
+ * Not thread-safe due to static state.
+ */
 int next_gray_code(int *arr, int n, int v) {
   static int *dir = NULL;
   static int dir_capacity = 0;

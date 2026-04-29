@@ -2,6 +2,18 @@
 #include "combinatorial.h"
 #include <stddef.h>
 
+/*
+ * Computes the coverage delta when changing a single cell value.
+ * 
+ * The delta is the change in covered combinations (+1, 0, or -1).
+ * Does NOT modify the array - purely computational.
+ * 
+ * For each affected t-combination, compares old vs new encoding.
+ * A combo becomes covered if P[itoc_idx][new_encoding] was 0 before.
+ * A combo becomes uncovered if P[itoc_idx][old_encoding] was 1 before.
+ * 
+ * Returns the delta (change in ca->covered).
+ */
 ssize_t ca_compute_cell_delta(covering_array_t *ca, const ca_affected_t *pre,
                               int **IToC, int row_idx, int col_idx,
                               int new_val) {
@@ -55,6 +67,15 @@ ssize_t ca_compute_cell_delta(covering_array_t *ca, const ca_affected_t *pre,
   return delta;
 }
 
+/*
+ * Applies a cell change and updates the coverage matrix P in place.
+ * 
+ * First computes the delta, then updates P matrix entries.
+ * The matrix row is updated at the end.
+ * The tcomb_counter and covered fields are NOT updated here.
+ * 
+ * Returns the delta (change in ca->covered).
+ */
 ssize_t ca_apply_cell_change(covering_array_t *ca, const ca_affected_t *pre,
                              int **IToC, int row_idx, int col_idx,
                              int new_val) {

@@ -2,6 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * Compares two pair diversity scores.
+ * 
+ * Primary: higher min_unique_pairs (worst lag has most unique pairs).
+ * Secondary: higher sum_unique_pairs (total unique pairs across lags).
+ * Tertiary: lower collision_penalty (fewer hash collisions).
+ */
 static int pd_score_is_better(const pd_score_t *a, const pd_score_t *b) {
   if (a->min_unique_pairs != b->min_unique_pairs) {
     return a->min_unique_pairs > b->min_unique_pairs;
@@ -12,6 +19,15 @@ static int pd_score_is_better(const pd_score_t *a, const pd_score_t *b) {
   return a->collision_penalty < b->collision_penalty;
 }
 
+/*
+ * Generates a row with balanced symbol distribution.
+ * 
+ * Each of the k positions is assigned a symbol [0, v-1].
+ * Symbol frequencies are balanced: floor(k/v) or ceil(k/v).
+ * Uses Fisher-Yates shuffle for symbol ordering.
+ * 
+ * Returns 0 on success, -1 on failure.
+ */
 static int pd_fill_balanced_random_row(int *row, int k, int v) {
   int *remaining = malloc((size_t)v * sizeof(int));
   int *symbols = malloc((size_t)v * sizeof(int));
@@ -67,6 +83,17 @@ static int pd_fill_balanced_random_row(int *row, int k, int v) {
   return 0;
 }
 
+/*
+ * Evaluates pair diversity for a seed array (circular sequence).
+ * 
+ * For each lag [1, k-1], computes pairs (seed[i], seed[(i+lag)%k]).
+ * Counts unique pairs per lag across all v*v possible pairs.
+ * 
+ * Score components:
+ * - min_unique_pairs: smallest unique pair count across lags (primary metric).
+ * - sum_unique_pairs: total unique pairs across all lags.
+ * - collision_penalty: sum of squares of pair frequencies.
+ */
 int pd_evaluate_seed(const int *seed, int k, int v, pd_score_t *out_score) {
   if (seed == NULL || out_score == NULL || k < 2 || v < 1) {
     return -1;
@@ -116,6 +143,17 @@ int pd_evaluate_seed(const int *seed, int k, int v, pd_score_t *out_score) {
   return 0;
 }
 
+/*
+ * Generates a balanced seed array with good pair diversity.
+ * 
+ * Uses hill climbing with restarts: generates random candidates, then
+ * improving swaps until convergence. Keeps the best across restarts.
+ * 
+ * Default: 64 restarts, k*k*20 iterations per restart.
+ * Returns the best seed and its score.
+ * 
+ * Returns 0 on success, -1 on failure.
+ */
 int pd_generate_balanced_seed(int k, int v, int restarts, int iterations,
                               int *out_seed, pd_score_t *out_score) {
   if (out_seed == NULL || k < 2 || v < 1) {

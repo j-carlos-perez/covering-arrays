@@ -7,6 +7,11 @@
 
 #define CA_GROWTH_FACTOR 10
 
+/*
+ * Computes balanced symbol quotas for a row.
+ * Each of the k positions gets a symbol [0, v-1].
+ * Quotients are balanced: floor(k/v) or ceil(k/v) per symbol.
+ */
 static int ca_init_balanced_quotas(int *quotas, int v, int k) {
   int base = k / v;
   int remainder = k % v;
@@ -39,6 +44,10 @@ static int ca_init_balanced_quotas(int *quotas, int v, int k) {
   return 0;
 }
 
+/*
+ * Fills a row with balanced symbol distribution.
+ * Uses quotas to ensure each symbol appears floor(k/v) or ceil(k/v) times.
+ */
 static int ca_fill_balanced_row(int *row, int k, int v) {
   int *remaining = malloc((size_t)v * sizeof(int));
   if (remaining == NULL) {
@@ -77,6 +86,16 @@ static int ca_fill_balanced_row(int *row, int k, int v) {
   return 0;
 }
 
+/*
+ * Creates a new covering array with N rows and k columns.
+ * Each cell is initialized to 0.
+ * 
+ * v: vocabulary size (symbols in [0, v-1]).
+ * t: strength (t-way combinations to cover).
+ * 
+ * P matrix and tcomb_counter are initialized to NULL (lazy allocation).
+ * Caller must free with ca_destroy().
+ */
 covering_array_t *ca_create(int N, int k, int v, int t) {
   covering_array_t *ca = malloc(sizeof(covering_array_t));
   if (ca == NULL) {
@@ -115,6 +134,10 @@ covering_array_t *ca_create(int N, int k, int v, int t) {
   return ca;
 }
 
+/*
+ * Frees all memory associated with the covering array.
+ * Handles NULL gracefully.
+ */
 void ca_destroy(covering_array_t *ca) {
   if (ca == NULL) {
     return;
@@ -136,6 +159,17 @@ void ca_destroy(covering_array_t *ca) {
   free(ca);
 }
 
+/*
+ * Validates a covering array and computes its coverage matrix P.
+ * 
+ * For each t-combination of columns, counts how many rows cover each v^t symbol combo.
+ * Updates ca->P, ca->covered, and ca->total.
+ * 
+ * R = C(k,t) = number of column combinations.
+ * C = v^t = number of symbol combinations per set.
+ * 
+ * Returns 1 if fully covering (covered == total), 0 otherwise.
+ */
 int ca_validate(covering_array_t *ca) {
   if (ca == NULL || ca->matrix == NULL) {
     return 0;
@@ -158,6 +192,19 @@ int ca_validate(covering_array_t *ca) {
     }
   }
 
+  if (ca->tcomb_counter == NULL) {
+    ca->tcomb_counter = get_vector_size_t(R);
+    if (ca->tcomb_counter == NULL) {
+      free_matrix(IToC, (int)R);
+      free_matrix_uint8(ca->P, (int)R);
+      return 0;
+    }
+  }
+
+  for (size_t i = 0; i < R; i++) {
+    ca->tcomb_counter[i] = C;
+  }
+
   for (size_t i = 0; i < R; i++) {
     for (size_t j = 0; j < C; j++) {
       ca->P[i][j] = 0;
@@ -168,6 +215,10 @@ int ca_validate(covering_array_t *ca) {
     for (size_t j = 0; j < R; j++) {
       int c = get_col(ca->matrix[i], IToC, (int)j, ca->t, ca->v);
       if (c != -1) {
+        if (ca->P[j][c] == 0) {
+          ca->covered++;
+          ca->tcomb_counter[j]--;
+        }
         ca->P[j][c]++;
       }
     }
@@ -191,6 +242,16 @@ int ca_validate(covering_array_t *ca) {
   return valid;
 }
 
+/*
+ * Loads a covering array from a file.
+ * 
+ * File format:
+ *   - Optional comment lines starting with 'C' or 'c'.
+ *   - Header: N k v ^ k t (e.g., "4 3 2 ^ 3 2")
+ *   - N rows of k integers each.
+ * 
+ * Returns a new covering_array_t, or NULL on failure.
+ */
 covering_array_t *ca_load(const char *filename) {
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
@@ -237,6 +298,14 @@ covering_array_t *ca_load(const char *filename) {
   return ca;
 }
 
+/*
+ * Saves a covering array to a file in the output folder.
+ * 
+ * File naming: N{N}k{k}v{v}^{k}t{t}[.ca|.ca.missing{missing}]
+ * The .missing suffix is added if missing > 0.
+ * 
+ * Returns 0 on success, -1 on failure.
+ */
 int ca_save(const char *folder_path, covering_array_t *ca, const char *comment,
             int missing) {
   if (ca == NULL || ca->matrix == NULL) {
@@ -283,6 +352,10 @@ int ca_save(const char *folder_path, covering_array_t *ca, const char *comment,
   return 0;
 }
 
+/*
+ * Prints the covering array parameters and matrix to stdout.
+ * Format: CA(N; t, k, v) followed by N rows of k integers.
+ */
 void ca_print(covering_array_t *ca) {
   printf("CA(%d; %d, %d, %d)\n", ca->N, ca->t, ca->k, ca->v);
   printf("Matrix:\n");
@@ -294,6 +367,13 @@ void ca_print(covering_array_t *ca) {
   }
 }
 
+/*
+ * Appends a row to the covering array matrix.
+ * Allocates additional rows if at capacity.
+ * Does NOT update the coverage matrix P.
+ * 
+ * Returns 0 on success, -1 on failure.
+ */
 int ca_add_row(covering_array_t *ca, const int *row) {
   if (ca == NULL || ca->matrix == NULL) {
     return -1;
@@ -321,6 +401,18 @@ int ca_add_row(covering_array_t *ca, const int *row) {
   return 0;
 }
 
+/*
+ * Adds coverage for a single row to the P matrix.
+ * 
+ * Requires ca->P and ca->tcomb_counter to be already allocated.
+ * Increments P[j][c] for each t-combination j that the row covers.
+ * Updates covered count and tcomb_counter when new combos are covered.
+ * 
+ * Does NOT modify ca->matrix or ca->N.
+ * Use after pv_validate() or ca_validate() has initialized P.
+ * 
+ * Returns 0 on success, -1 if P or tcomb_counter is NULL.
+ */
 int ca_add_row_coverage(covering_array_t *ca, const int *row) {
   if (ca == NULL || row == NULL) {
     return -1;
@@ -355,6 +447,9 @@ int ca_add_row_coverage(covering_array_t *ca, const int *row) {
   return 0;
 }
 
+/*
+ * Fills the matrix with uniformly random values [0, v-1].
+ */
 int ca_init_random(covering_array_t *ca) {
   if (ca == NULL || ca->matrix == NULL) {
     return -1;
@@ -369,6 +464,10 @@ int ca_init_random(covering_array_t *ca) {
   return 0;
 }
 
+/*
+ * Fills each row with balanced symbol distribution.
+ * Uses ca_fill_balanced_row() for each row.
+ */
 int ca_init_random_balanced(covering_array_t *ca) {
   if (ca == NULL || ca->matrix == NULL) {
     return -1;
@@ -383,6 +482,13 @@ int ca_init_random_balanced(covering_array_t *ca) {
   return 0;
 }
 
+/*
+ * Initializes using position rotation with random first row.
+ * 
+ * First row is random; each subsequent row is the previous row
+ * shifted right by one position (with wraparound).
+ * Requires N == k.
+ */
 int ca_init_rotation_position(covering_array_t *ca) {
   if (ca == NULL || ca->matrix == NULL) {
     return -1;
@@ -407,6 +513,10 @@ int ca_init_rotation_position(covering_array_t *ca) {
   return 0;
 }
 
+/*
+ * Position rotation with balanced first row.
+ * Same as ca_init_rotation_position() but first row is balanced.
+ */
 int ca_init_rotation_position_balanced(covering_array_t *ca) {
   if (ca == NULL || ca->matrix == NULL) {
     return -1;
@@ -431,6 +541,13 @@ int ca_init_rotation_position_balanced(covering_array_t *ca) {
   return 0;
 }
 
+/*
+ * Full rotation: each row shifts previous row and adds row index to each position.
+ * 
+ * matrix[i][j] = (matrix[0][(j-i)%k] + i) % v
+ * This creates a Latin square pattern.
+ * Requires N == k.
+ */
 int ca_init_rotation_full(covering_array_t *ca) {
   if (ca == NULL || ca->matrix == NULL) {
     return -1;
@@ -456,6 +573,10 @@ int ca_init_rotation_full(covering_array_t *ca) {
   return 0;
 }
 
+/*
+ * Full rotation with balanced first row.
+ * Same as ca_init_rotation_full() but first row is balanced.
+ */
 int ca_init_rotation_full_balanced(covering_array_t *ca) {
   if (ca == NULL || ca->matrix == NULL) {
     return -1;

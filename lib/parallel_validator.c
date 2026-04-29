@@ -4,6 +4,21 @@
 #include <omp.h>
 #include <stdlib.h>
 
+/*
+ * Validates a covering array and computes its coverage matrix P in parallel using OpenMP.
+ * 
+ * For each t-combination of columns, determines which v^t symbol combinations are covered.
+ * Updates ca->P (coverage counts), ca->tcomb_counter (uncovered per row), and ca->covered.
+ * 
+ * R = C(k, t) = number of t-combinations of columns
+ * C = v^t = number of symbol combinations per t-set
+ * 
+ * The P matrix: P[j][c] = how many rows cover the j-th column t-set with combo c.
+ * The tcomb_counter: tcomb_counter[j] = remaining uncovered combos in row j (initially C).
+ * 
+ * Requires ca->P and ca->tcomb_counter to be NULL (will allocate if needed).
+ * Does NOT reset existing values; accumulates on top of previous coverage.
+ */
 void pv_validate(covering_array_t *ca) {
   if (ca == NULL || ca->matrix == NULL)
     return;
