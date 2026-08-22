@@ -175,6 +175,13 @@ int main(int argc, char *argv[]) {
   }
 
   valid = ca_validate(ca);
+  /* See gen_ca.c: total == 0 means validation failed, which would print 0/0
+     and let ca_save() name an incomplete array as complete. */
+  if (ca->total == 0) {
+    fprintf(stderr, "Error: validation failed; coverage state unavailable\n");
+    ca_destroy(ca);
+    return 1;
+  }
   printf("Coverage after full validation: %zu / %zu (%.1f%%) - %s\n",
          ca->covered, ca->total,
          100.0 * (double)ca->covered / (double)ca->total,

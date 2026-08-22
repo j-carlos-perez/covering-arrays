@@ -161,7 +161,9 @@ void ca_print(covering_array_t *ca);
  * afterwards. Splitting the two lets you evaluate a candidate row's coverage
  * before committing to storing it.
  *
- * row must hold k symbols in [0, v-1]; the function validates them.
+ * row must hold k symbols in [0, v-1]; the function validates them. Note
+ * this is stricter than ca_add_row_coverage(), which also accepts v as a
+ * wildcard: a row you store must be fully assigned.
  *
  * Returns: 0 on success, -1 if an argument or symbol is invalid, N has reached
  *          CA_COUNT_MAX, or allocation fails (the array is left untouched).
@@ -177,7 +179,9 @@ int ca_add_row(covering_array_t *ca, const int *row);
  * passed to ca_add_row() to keep the two in step.
  *
  * Preconditions: valid P/tcomb_counter/total state must exist -- validate
- *                first. Symbols may be in [0,v], where v is the wildcard.
+ *                first. Symbols may be in [0,v], where v is the wildcard --
+ *                deliberately wider than ca_add_row(), so a partially
+ *                assigned row can be scored here but not stored there.
  * Returns:       0 on success, -1 if ca or row is NULL, the coverage state has
  *                not been allocated, parameters/symbols are unusable, an
  *                allocation fails, or a coverage counter would overflow.

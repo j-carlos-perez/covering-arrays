@@ -82,6 +82,13 @@ int main(int argc, char *argv[]) {
 
   printf("Validating covering array in parallel...\n");
   pv_validate(ca);
+  /* pv_validate() reports nothing directly; it clears total before working, so
+     total == 0 is the only signal that it failed. */
+  if (ca->total == 0) {
+    fprintf(stderr, "Error: validation failed; coverage state unavailable\n");
+    ca_destroy(ca);
+    return EXIT_FAILURE;
+  }
   printf("Coverage before: %zu / %zu (%.1f%%)\n", ca->covered, ca->total,
          ca->total > 0 ? 100.0 * ca->covered / ca->total : 0.0);
 
@@ -109,7 +116,12 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
   printf("Adding coverage from the new row\n");
-  ca_add_row_coverage(ca, new_row);
+  if (ca_add_row_coverage(ca, new_row) != 0) {
+    fprintf(stderr, "Error: failed to update coverage for the new row\n");
+    free(new_row);
+    ca_destroy(ca);
+    return EXIT_FAILURE;
+  }
   free(new_row);
 
   printf("New row count: %d\n", ca->N);

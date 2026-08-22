@@ -107,6 +107,15 @@ int main(int argc, char *argv[]) {
   /* ca->covered/ca->total are only meaningful once ca_validate() has run;
      printing them here divided 0 by 0 and reported "nan%". */
   int valid = ca_validate(ca);
+  /* ca_validate() clears total before working, so total == 0 means it failed
+     outright. Bail: the percentage below would be 0/0, and ca_save() derives
+     its ".missing" suffix from covered/total, so it would name a file as if
+     the array were complete. */
+  if (ca->total == 0) {
+    fprintf(stderr, "Error: validation failed; coverage state unavailable\n");
+    ca_destroy(ca);
+    return 1;
+  }
   printf("Coverage after full validation: %zu / %zu (%.1f%%) - %s\n",
          ca->covered, ca->total,
          100.0 * (double)ca->covered / (double)ca->total,
