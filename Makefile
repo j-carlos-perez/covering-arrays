@@ -22,6 +22,10 @@ TEST_SRC = unittests/test_combinatorial.c unittests/unity.c
 TEST_OBJ = $(TEST_SRC:.c=.o)
 TEST_BIN = test_runner
 
+CA_TEST_SRC = unittests/test_covering_array.c unittests/unity.c
+CA_TEST_OBJ = $(CA_TEST_SRC:.c=.o)
+CA_TEST_BIN = test_covering_array_runner
+
 PV_TEST_SRC = unittests/test_parallel_validator.c unittests/unity.c
 PV_TEST_OBJ = $(PV_TEST_SRC:.c=.o)
 PV_TEST_BIN = test_parallel_runner
@@ -31,12 +35,13 @@ NON_TEST_BINS = validator dump gen_ca gen_ca_optimized validator_parallel \
                 examples/optimize_cell_file examples/optimize_tcolumns \
                 examples/optimize_tcolumns_file extend_coverage
 
-TEST_BINS = $(TEST_BIN)
+TEST_BINS = $(TEST_BIN) $(CA_TEST_BIN)
 
 all: $(NON_TEST_BINS)
 
-build: $(NON_TEST_BINS) $(LIB_OBJ) $(TEST_OBJ) $(PV_OBJ)
+build: $(NON_TEST_BINS) $(LIB_OBJ) $(TEST_OBJ) $(CA_TEST_OBJ) $(PV_OBJ)
 	$(CC) $(CFLAGS) -o $(TEST_BIN) $(LIB_OBJ) $(TEST_OBJ)
+	$(CC) $(CFLAGS) -o $(CA_TEST_BIN) $(LIB_OBJ) $(CA_TEST_OBJ)
 	@echo "NOTE: test_parallel_runner skipped (unittests/test_parallel_validator.c missing)"
 
 dump: dump.c $(LIB_OBJ)
@@ -48,9 +53,11 @@ $(TARGET): $(OBJ)
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-test: $(LIB_OBJ) $(TEST_OBJ)
-	$(CC) $(CFLAGS) -o $(TEST_BIN) $^
+test: $(LIB_OBJ) $(TEST_OBJ) $(CA_TEST_OBJ)
+	$(CC) $(CFLAGS) -o $(TEST_BIN) $(LIB_OBJ) $(TEST_OBJ)
 	./$(TEST_BIN)
+	$(CC) $(CFLAGS) -o $(CA_TEST_BIN) $(LIB_OBJ) $(CA_TEST_OBJ)
+	./$(CA_TEST_BIN)
 
 pv_test: $(LIB_OBJ) $(PV_OBJ) $(PV_TEST_OBJ)
 	$(CC) $(CFLAGS) -o $(PV_TEST_BIN) $^
@@ -86,7 +93,7 @@ extend_coverage: extend_coverage.c $(LIB_OBJ) $(PV_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_clean:
-	rm -f $(TEST_OBJ) $(TEST_BIN)
+	rm -f $(TEST_OBJ) $(CA_TEST_OBJ) $(TEST_BINS)
 
 clean:
 	rm -f $(OBJ) $(TARGET) gen_ca gen_ca_optimized examples/update_coverage examples/optimize_cell examples/optimize_cell_file validator_parallel $(PV_OBJ) $(TEST_BINS)

@@ -4,7 +4,8 @@
 #include <string.h>
 
 static void print_usage(const char *prog) {
-  fprintf(stderr, "Usage: %s -f <input_file> [-o <output_folder>] [-s]\n", prog);
+  fprintf(stderr, "Usage: %s -f <input_file> [-o <output_folder>] [-s]\n",
+          prog);
   fprintf(stderr, "\n");
   fprintf(stderr, "Options:\n");
   fprintf(
@@ -82,8 +83,14 @@ int main(int argc, char *argv[]) {
          coverage_pct);
   printf("\nValidation: %s\n", valid ? "PASSED" : "FAILED");
 
+  if (!silent) {
+    size_t group_count = binomial(ca->k, ca->t);
+    for (size_t i = 0; i < group_count; i++) {
+      printf("Missing on GTP %zu is %zu\n", i, ca->tcomb_counter[i]);
+    }
+  }
   if (output_folder != NULL) {
-    int result = ca_save(output_folder, ca, "Validated by validator", 0);
+    int result = ca_save(output_folder, ca, "Validated by validator");
     if (result == 0) {
       printf("Saved to %s\n", output_folder);
     } else {

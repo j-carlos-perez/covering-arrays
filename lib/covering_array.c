@@ -89,10 +89,10 @@ static int ca_fill_balanced_row(int *row, int k, int v) {
 /*
  * Creates a new covering array with N rows and k columns.
  * Each cell is initialized to 0.
- * 
+ *
  * v: vocabulary size (symbols in [0, v-1]).
  * t: strength (t-way combinations to cover).
- * 
+ *
  * P matrix and tcomb_counter are initialized to NULL (lazy allocation).
  * Caller must free with ca_destroy().
  */
@@ -161,13 +161,13 @@ void ca_destroy(covering_array_t *ca) {
 
 /*
  * Validates a covering array and computes its coverage matrix P.
- * 
- * For each t-combination of columns, counts how many rows cover each v^t symbol combo.
- * Updates ca->P, ca->covered, and ca->total.
- * 
+ *
+ * For each t-combination of columns, counts how many rows cover each v^t symbol
+ * combo. Updates ca->P, ca->covered, and ca->total.
+ *
  * R = C(k,t) = number of column combinations.
  * C = v^t = number of symbol combinations per set.
- * 
+ *
  * Returns 1 if fully covering (covered == total), 0 otherwise.
  */
 int ca_validate(covering_array_t *ca) {
@@ -244,12 +244,12 @@ int ca_validate(covering_array_t *ca) {
 
 /*
  * Loads a covering array from a file.
- * 
+ *
  * File format:
  *   - Optional comment lines starting with 'C' or 'c'.
  *   - Header: N k v ^ k t (e.g., "4 3 2 ^ 3 2")
  *   - N rows of k integers each.
- * 
+ *
  * Returns a new covering_array_t, or NULL on failure.
  */
 covering_array_t *ca_load(const char *filename) {
@@ -300,14 +300,14 @@ covering_array_t *ca_load(const char *filename) {
 
 /*
  * Saves a covering array to a file in the output folder.
- * 
+ *
  * File naming: N{N}k{k}v{v}^{k}t{t}[.ca|.ca.missing{missing}]
  * The .missing suffix is added if missing > 0.
- * 
+ *
  * Returns 0 on success, -1 on failure.
  */
-int ca_save(const char *folder_path, covering_array_t *ca, const char *comment,
-            int missing) {
+int ca_save(const char *folder_path, covering_array_t *ca,
+            const char *comment) {
   if (ca == NULL || ca->matrix == NULL) {
     return -1;
   }
@@ -319,8 +319,10 @@ int ca_save(const char *folder_path, covering_array_t *ca, const char *comment,
   }
 
   char filename[1024];
+  size_t missing =
+      ca->total > ca->covered ? ca->total - ca->covered : (size_t)0;
   if (missing > 0) {
-    snprintf(filename, sizeof(filename), "%s/N%dk%dv%d^%dt%d.ca.missing%d",
+    snprintf(filename, sizeof(filename), "%s/N%dk%dv%d^%dt%d.ca.missing%zu",
              folder_path, ca->N, ca->k, ca->v, ca->k, ca->t, missing);
   } else {
     snprintf(filename, sizeof(filename), "%s/N%dk%dv%d^%dt%d.ca", folder_path,
@@ -371,7 +373,7 @@ void ca_print(covering_array_t *ca) {
  * Appends a row to the covering array matrix.
  * Allocates additional rows if at capacity.
  * Does NOT update the coverage matrix P.
- * 
+ *
  * Returns 0 on success, -1 on failure.
  */
 int ca_add_row(covering_array_t *ca, const int *row) {
@@ -403,14 +405,14 @@ int ca_add_row(covering_array_t *ca, const int *row) {
 
 /*
  * Adds coverage for a single row to the P matrix.
- * 
+ *
  * Requires ca->P and ca->tcomb_counter to be already allocated.
  * Increments P[j][c] for each t-combination j that the row covers.
  * Updates covered count and tcomb_counter when new combos are covered.
- * 
+ *
  * Does NOT modify ca->matrix or ca->N.
  * Use after pv_validate() or ca_validate() has initialized P.
- * 
+ *
  * Returns 0 on success, -1 if P or tcomb_counter is NULL.
  */
 int ca_add_row_coverage(covering_array_t *ca, const int *row) {
@@ -484,7 +486,7 @@ int ca_init_random_balanced(covering_array_t *ca) {
 
 /*
  * Initializes using position rotation with random first row.
- * 
+ *
  * First row is random; each subsequent row is the previous row
  * shifted right by one position (with wraparound).
  * Requires N == k.
@@ -542,8 +544,9 @@ int ca_init_rotation_position_balanced(covering_array_t *ca) {
 }
 
 /*
- * Full rotation: each row shifts previous row and adds row index to each position.
- * 
+ * Full rotation: each row shifts previous row and adds row index to each
+ * position.
+ *
  * matrix[i][j] = (matrix[0][(j-i)%k] + i) % v
  * This creates a Latin square pattern.
  * Requires N == k.

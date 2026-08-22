@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
     printf("\nValidation: %s\n", valid ? "PASSED" : "FAILED");
 
     if (output_folder != NULL) {
-        int result = ca_save(output_folder, ca, "Validated by validator_parallel", 0);
+        int result = ca_save(output_folder, ca, "Validated by validator_parallel");
         if (result == 0) {
             printf("Saved to %s\n", output_folder);
         } else {

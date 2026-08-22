@@ -12,6 +12,7 @@ dump
 gen_ca
 gen_ca_optimized
 test_runner
+test_*_runner
 validator
 sweep.sh
 examples/optimize_*

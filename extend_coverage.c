@@ -10,8 +10,11 @@ static void print_usage(const char *prog) {
   fprintf(stderr, "Usage: %s -f <input_file> -o <output_folder>\n", prog);
   fprintf(stderr, "\n");
   fprintf(stderr, "Options:\n");
-  fprintf(stderr, "  -f, --file <path>    Covering array file to extend (required)\n");
-  fprintf(stderr, "  -o, --output <folder> Output folder for extended array (required)\n");
+  fprintf(stderr,
+          "  -f, --file <path>    Covering array file to extend (required)\n");
+  fprintf(
+      stderr,
+      "  -o, --output <folder> Output folder for extended array (required)\n");
   fprintf(stderr, "  -h, --help           Show this help message\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "Examples:\n");
@@ -70,7 +73,8 @@ int main(int argc, char *argv[]) {
   printf("Loading covering array from: %s\n", input_file);
   covering_array_t *ca = ca_load(input_file);
   if (ca == NULL) {
-    fprintf(stderr, "Error: failed to load covering array from '%s'\n", input_file);
+    fprintf(stderr, "Error: failed to load covering array from '%s'\n",
+            input_file);
     return EXIT_FAILURE;
   }
 
@@ -78,8 +82,7 @@ int main(int argc, char *argv[]) {
 
   printf("Validating covering array in parallel...\n");
   pv_validate(ca);
-  printf("Coverage before: %zu / %zu (%.1f%%)\n",
-         ca->covered, ca->total,
+  printf("Coverage before: %zu / %zu (%.1f%%)\n", ca->covered, ca->total,
          ca->total > 0 ? 100.0 * ca->covered / ca->total : 0.0);
 
   int *new_row = malloc(ca->k * sizeof(int));
@@ -105,19 +108,17 @@ int main(int argc, char *argv[]) {
     ca_destroy(ca);
     return EXIT_FAILURE;
   }
+  printf("Adding coverage from the new row\n");
+  ca_add_row_coverage(ca, new_row);
   free(new_row);
 
   printf("New row count: %d\n", ca->N);
 
-  printf("Recalculating coverage...\n");
-  pv_validate(ca);
-  printf("Coverage after: %zu / %zu (%.1f%%)\n",
-         ca->covered, ca->total,
+  printf("Coverage after: %zu / %zu (%.1f%%)\n", ca->covered, ca->total,
          ca->total > 0 ? 100.0 * ca->covered / ca->total : 0.0);
 
-  int missing = (ca->covered < ca->total) ? 1 : 0;
   printf("Saving to: %s\n", output_folder);
-  if (ca_save(output_folder, ca, "Extended by adding random row", missing) != 0) {
+  if (ca_save(output_folder, ca, "Extended by adding random row") != 0) {
     fprintf(stderr, "Error: failed to save covering array\n");
     ca_destroy(ca);
     return EXIT_FAILURE;

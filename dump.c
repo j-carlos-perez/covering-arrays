@@ -282,7 +282,7 @@ int main(int argc, char const *argv[]) {
   }
 
   int save_result =
-      ca_save(PATH, ca_out, "Generado mediante merge ROW greedy", min);
+      ca_save(PATH, ca_out, "Generado mediante merge ROW greedy");
   if (save_result != 0) {
     fprintf(stderr, "Error: failed to save output file\n");
   }

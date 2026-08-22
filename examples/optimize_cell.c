@@ -176,7 +176,7 @@ int main(int argc, char *argv[]) {
 
   printf("\n=== Saving result ===\n");
   int missing = (int)(ca->total - ca->covered);
-  if (ca_save(output_folder, ca, "Optimized covering array", missing) == 0) {
+  if (ca_save(output_folder, ca, "Optimized covering array") == 0) {
     printf("Saved to: %s (missing: %d)\n", output_folder, missing);
   } else {
     fprintf(stderr, "Warning: failed to save CA\n");

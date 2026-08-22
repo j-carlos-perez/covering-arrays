@@ -108,11 +108,10 @@ int main(int argc, char *argv[]) {
          100.0 * (double)ca->covered / (double)ca->total,
          valid ? "VALID" : "INVALID");
 
-  int missing = (int)(ca->total - ca->covered);
   char comment[96];
   snprintf(comment, sizeof(comment), "creation method: %s, balanced: %s",
            method, balanced ? "yes" : "no");
-  if (ca_save(output_folder, ca, comment, missing) != 0) {
+  if (ca_save(output_folder, ca, comment) != 0) {
     fprintf(stderr, "Warning: failed to save covering array\n");
   } else {
     printf("Saved to: %s\n", output_folder);

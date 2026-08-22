@@ -106,7 +106,6 @@ int main(int argc, char *argv[]) {
   int N;
   int result;
   int valid;
-  int missing;
   size_t min_N = 1;
   const char *method;
   const char *output_folder;
@@ -176,10 +175,9 @@ int main(int argc, char *argv[]) {
          100.0 * (double)ca->covered / (double)ca->total,
          valid ? "VALID" : "INVALID");
 
-  missing = (int)(ca->total - ca->covered);
   snprintf(comment, sizeof(comment),
            "creation method: %s, optimized: pair-diversity", method);
-  if (ca_save(output_folder, ca, comment, missing) != 0) {
+  if (ca_save(output_folder, ca, comment) != 0) {
     fprintf(stderr, "Warning: failed to save covering array\n");
   } else {
     printf("Saved to: %s\n", output_folder);

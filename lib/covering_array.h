@@ -21,8 +21,7 @@ covering_array_t *ca_create(int N, int k, int v, int t);
 void ca_destroy(covering_array_t *ca);
 int ca_validate(covering_array_t *ca);
 covering_array_t *ca_load(const char *filename);
-int ca_save(const char *folder_path, covering_array_t *ca, const char *comment,
-            int missing);
+int ca_save(const char *folder_path, covering_array_t *ca, const char *comment);
 void ca_print(covering_array_t *ca);
 int ca_add_row(covering_array_t *ca, const int *row);
 int ca_add_row_coverage(covering_array_t *ca, const int *row);
