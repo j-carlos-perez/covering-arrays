@@ -49,8 +49,13 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (t <= 0 || k <= 0 || v <= 0) {
-    fprintf(stderr, "Error: t, k, v must be positive\n");
+  if (t <= 0 || k <= 0 || v < 2) {
+    fprintf(stderr, "Error: need t >= 1, k >= 1, v >= 2\n");
+    return 1;
+  }
+  if (t > k) {
+    fprintf(stderr, "Error: strength t (%d) cannot exceed columns k (%d)\n", t,
+            k);
     return 1;
   }
 
@@ -99,9 +104,8 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  printf("\nInitial coverage (%s): %zu / %zu (%.1f%%)\n", method, ca->covered,
-         ca->total, 100.0 * (double)ca->covered / (double)ca->total);
-
+  /* ca->covered/ca->total are only meaningful once ca_validate() has run;
+     printing them here divided 0 by 0 and reported "nan%". */
   int valid = ca_validate(ca);
   printf("Coverage after full validation: %zu / %zu (%.1f%%) - %s\n",
          ca->covered, ca->total,

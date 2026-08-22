@@ -123,8 +123,13 @@ int main(int argc, char *argv[]) {
   method = argv[4];
   output_folder = (argc > 5) ? argv[5] : "./output_test";
 
-  if (t <= 0 || k <= 0 || v <= 0) {
-    fprintf(stderr, "Error: t, k, v must be positive\n");
+  if (t <= 0 || k <= 0 || v < 2) {
+    fprintf(stderr, "Error: need t >= 1, k >= 1, v >= 2\n");
+    return 1;
+  }
+  if (t > k) {
+    fprintf(stderr, "Error: strength t (%d) cannot exceed columns k (%d)\n", t,
+            k);
     return 1;
   }
 

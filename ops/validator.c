@@ -83,8 +83,8 @@ int main(int argc, char *argv[]) {
          coverage_pct);
   printf("\nValidation: %s\n", valid ? "PASSED" : "FAILED");
 
-  if (!silent) {
-    size_t group_count = binomial(ca->k, ca->t);
+  if (!silent && ca->tcomb_counter != NULL) {
+    size_t group_count = (size_t)binomial(ca->k, ca->t);
     for (size_t i = 0; i < group_count; i++) {
       printf("Missing on GTP %zu is %zu\n", i, ca->tcomb_counter[i]);
     }

@@ -11,11 +11,17 @@ typedef struct covering_array {
   int v;
   int t;
   int **matrix;
-  uint8_t **P;
+  ca_count_t **P;
   size_t *tcomb_counter;
   size_t covered;
   size_t total;
 } covering_array_t;
+
+/*
+ * Parameter limits. N is bounded by what a coverage counter can hold (see
+ * ca_count_t); t must be a usable strength for k columns.
+ */
+int ca_params_valid(int N, int k, int v, int t);
 
 covering_array_t *ca_create(int N, int k, int v, int t);
 void ca_destroy(covering_array_t *ca);

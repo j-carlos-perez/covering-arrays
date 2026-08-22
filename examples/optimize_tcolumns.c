@@ -44,38 +44,40 @@ static int find_best_values_for_tcolumns(covering_array_t *ca,
     best_values[j] = current_vals[j];
   }
 
-  for (int v0 = 0; v0 < ca->v; v0++) {
-    for (int v1 = 0; v1 < ca->v; v1++) {
-      if (t == 2) {
-        int new_vals[2] = {v0, v1};
-        ssize_t delta = ca_compute_tcolumns_delta(ca, pre, IToC, row_idx,
-                                                  change_set_idx, new_vals);
-        if (delta > best_delta) {
-          best_delta = delta;
-          best_values[0] = v0;
-          best_values[1] = v1;
-        }
-      }
-    }
+  /* Enumerate all v^t assignments of the t changing columns as an odometer.
+     The previous version hard-coded t == 2 (inside two loops that ran for
+     every t) and t == 3, so t >= 4 searched nothing and silently returned the
+     current values. */
+  int *trial = malloc((size_t)t * sizeof(int));
+  if (trial == NULL) {
+    free(current_vals);
+    free(best_values);
+    return -1;
+  }
+  for (int j = 0; j < t; j++) {
+    trial[j] = 0;
   }
 
-  if (t == 3) {
-    for (int v0 = 0; v0 < ca->v; v0++) {
-      for (int v1 = 0; v1 < ca->v; v1++) {
-        for (int v2 = 0; v2 < ca->v; v2++) {
-          int new_vals[3] = {v0, v1, v2};
-          ssize_t delta = ca_compute_tcolumns_delta(ca, pre, IToC, row_idx,
-                                                    change_set_idx, new_vals);
-          if (delta > best_delta) {
-            best_delta = delta;
-            best_values[0] = v0;
-            best_values[1] = v1;
-            best_values[2] = v2;
-          }
-        }
+  while (1) {
+    ssize_t delta = ca_compute_tcolumns_delta(ca, pre, IToC, row_idx,
+                                              change_set_idx, trial);
+    if (delta > best_delta) {
+      best_delta = delta;
+      for (int j = 0; j < t; j++) {
+        best_values[j] = trial[j];
       }
     }
+
+    int pos = t - 1;
+    while (pos >= 0 && ++trial[pos] == ca->v) {
+      trial[pos] = 0;
+      pos--;
+    }
+    if (pos < 0) {
+      break;
+    }
   }
+  free(trial);
 
   printf("  Best values: {");
   for (int j = 0; j < t; j++) {
@@ -106,8 +108,9 @@ int main(int argc, char *argv[]) {
   int v = atoi(argv[4]);
   const char *output_folder = argv[5];
 
-  if (N <= 0 || t <= 0 || k <= 0 || v <= 0) {
-    fprintf(stderr, "Error: all parameters must be positive\n");
+  if (!ca_params_valid(N, k, v, t)) {
+    fprintf(stderr,
+            "Error: unusable parameters (need N >= 1, v >= 2, 1 <= t <= k)\n");
     return 1;
   }
 

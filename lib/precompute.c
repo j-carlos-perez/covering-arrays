@@ -1,6 +1,7 @@
 #include "precompute.h"
 #include "combinatorial.h"
 #include "memory.h"
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,8 +22,26 @@
  * Caller must free with precompute_destroy().
  */
 ca_affected_t *precompute_create(size_t k, size_t t) {
-  size_t R = binomial(k, t);
-  size_t not_affected = binomial(k - t, t);
+  /* k and t are size_t, so `k - t` wraps for k < t and the int cast inside
+     binomial() then produces garbage. Screen the parameters first. */
+  if (t < 1 || k < t || k > (size_t)INT_MAX || t > (size_t)INT_MAX) {
+    fprintf(stderr, "Error: unusable precompute parameters k=%zu, t=%zu\n", k,
+            t);
+    return NULL;
+  }
+
+  uint64_t R64 = binomial((int)k, (int)t);
+  /* C(k-t,t) is 0 when k < 2t, which is the correct "nothing unaffected". */
+  uint64_t not_affected64 = binomial((int)(k - t), (int)t);
+  if (!binomial_is_usable(R64) || !binomial_is_usable(not_affected64) ||
+      R64 == 0) {
+    fprintf(stderr, "Error: C(k,t) is not representable for k=%zu, t=%zu\n", k,
+            t);
+    return NULL;
+  }
+
+  size_t R = (size_t)R64;
+  size_t not_affected = (size_t)not_affected64;
   size_t affected_per_change = R - not_affected;
 
   if (R > UINT16_MAX) {
@@ -67,7 +86,13 @@ ca_affected_t *precompute_create(size_t k, size_t t) {
     return NULL;
   }
 
-  size_t entries_per_col = binomial(k - 1, t - 1);
+  uint64_t entries64 = binomial((int)k - 1, (int)t - 1);
+  if (!binomial_is_usable(entries64)) {
+    free(pre->indices);
+    free(pre);
+    return NULL;
+  }
+  size_t entries_per_col = (size_t)entries64;
 
   if (entries_per_col > UINT16_MAX) {
     fprintf(stderr,
@@ -92,11 +117,26 @@ ca_affected_t *precompute_create(size_t k, size_t t) {
     return NULL;
   }
 
-  int **IToC = get_matrix((int)R, (int)t);
-  t_wise(IToC, (int)k, (int)t);
+  int **IToC = get_matrix(R, t);
+  if (IToC == NULL || t_wise(IToC, (int)k, (int)t) != 0) {
+    free_matrix(IToC, R);
+    free(pre->indices);
+    free(pre);
+    return NULL;
+  }
 
   size_t *col_offsets = malloc((k + 1) * sizeof(size_t));
   uint16_t *col_indices = malloc(k * entries_per_col * sizeof(uint16_t));
+  uint8_t *visited = calloc(R, sizeof(uint8_t));
+  if (col_offsets == NULL || col_indices == NULL || visited == NULL) {
+    free(col_offsets);
+    free(col_indices);
+    free(visited);
+    free_matrix(IToC, R);
+    free(pre->indices);
+    free(pre);
+    return NULL;
+  }
 
   col_offsets[0] = 0;
   for (size_t col = 0; col < k; col++) {
@@ -104,6 +144,19 @@ ca_affected_t *precompute_create(size_t k, size_t t) {
     for (size_t row = 0; row < R; row++) {
       for (size_t j = 0; j < t; j++) {
         if ((size_t)IToC[row][j] == col) {
+          /* Exactly C(k-1,t-1) rows contain any given column, so count can
+             never reach entries_per_col; assert it rather than assume it,
+             because overrunning here would write into the next column's
+             region of the same flat array. */
+          if (count >= entries_per_col) {
+            free(col_offsets);
+            free(col_indices);
+            free(visited);
+            free_matrix(IToC, R);
+            free(pre->indices);
+            free(pre);
+            return NULL;
+          }
           col_indices[col * entries_per_col + count++] = (uint16_t)row;
           break;
         }
@@ -115,8 +168,6 @@ ca_affected_t *precompute_create(size_t k, size_t t) {
   pre->entries_per_col = entries_per_col;
   pre->col_offsets = col_offsets;
   pre->col_indices = col_indices;
-
-  uint8_t *visited = calloc(R, sizeof(uint8_t));
 
   for (size_t change_idx = 0; change_idx < R; change_idx++) {
     int *changed_row = IToC[change_idx];
@@ -141,7 +192,7 @@ ca_affected_t *precompute_create(size_t k, size_t t) {
   }
 
   free(visited);
-  free_matrix(IToC, (int)R);
+  free_matrix(IToC, R);
 
   return pre;
 }

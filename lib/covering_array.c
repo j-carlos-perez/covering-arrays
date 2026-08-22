@@ -30,7 +30,7 @@ static int ca_init_balanced_quotas(int *quotas, int v, int k) {
   }
 
   for (int i = v - 1; i > 0; i--) {
-    int j = rand() % (i + 1);
+    int j = rand_below(i + 1);
     int tmp = symbols[i];
     symbols[i] = symbols[j];
     symbols[j] = tmp;
@@ -61,7 +61,7 @@ static int ca_fill_balanced_row(int *row, int k, int v) {
 
   for (int col = 0; col < k; col++) {
     int slots_left = k - col;
-    int pick = rand() % slots_left;
+    int pick = rand_below(slots_left);
     int cumulative = 0;
     int selected_symbol = -1;
 
@@ -87,16 +87,58 @@ static int ca_fill_balanced_row(int *row, int k, int v) {
 }
 
 /*
+ * Validates covering-array parameters.
+ *
+ * Returns 1 if the combination is usable, 0 otherwise. The bounds matter
+ * because out-of-range values used to flow straight into allocation sizes:
+ * a negative N became a huge size_t, and t > k made C(k,t) zero, so the
+ * combination generator wrote through a matrix that had no rows.
+ */
+int ca_params_valid(int N, int k, int v, int t) {
+  if (N <= 0 || k <= 0 || v < 2 || t < 1) {
+    return 0;
+  }
+  if (t > k) {
+    return 0;
+  }
+  if (N > CA_COUNT_MAX) {
+    return 0; /* a coverage counter could not hold the row count */
+  }
+
+  /* C(k,t) and v^t must both be representable and allocatable. */
+  uint64_t R = binomial(k, t);
+  if (!binomial_is_usable(R) || R == 0) {
+    return 0;
+  }
+  uint64_t C = 1;
+  for (int i = 0; i < t; i++) {
+    if (C > UINT64_MAX / (uint64_t)v) {
+      return 0;
+    }
+    C *= (uint64_t)v;
+  }
+  if (C > (uint64_t)SIZE_MAX / R) {
+    return 0; /* R * C would overflow */
+  }
+  return 1;
+}
+
+/*
  * Creates a new covering array with N rows and k columns.
  * Each cell is initialized to 0.
  *
  * v: vocabulary size (symbols in [0, v-1]).
  * t: strength (t-way combinations to cover).
  *
+ * Returns NULL if the parameters fail ca_params_valid().
  * P matrix and tcomb_counter are initialized to NULL (lazy allocation).
  * Caller must free with ca_destroy().
  */
 covering_array_t *ca_create(int N, int k, int v, int t) {
+  if (!ca_params_valid(N, k, v, t)) {
+    return NULL;
+  }
+
   covering_array_t *ca = malloc(sizeof(covering_array_t));
   if (ca == NULL) {
     return NULL;
@@ -148,8 +190,8 @@ void ca_destroy(covering_array_t *ca) {
   }
 
   if (ca->P != NULL) {
-    size_t R = binomial(ca->k, ca->t);
-    free_matrix_uint8(ca->P, R);
+    size_t R = (size_t)binomial(ca->k, ca->t);
+    free_matrix_count(ca->P, R);
   }
 
   if (ca->tcomb_counter != NULL) {
@@ -174,20 +216,29 @@ int ca_validate(covering_array_t *ca) {
   if (ca == NULL || ca->matrix == NULL) {
     return 0;
   }
+  if (!ca_params_valid(ca->N, ca->k, ca->v, ca->t)) {
+    return 0;
+  }
 
-  size_t R = binomial(ca->k, ca->t);
+  size_t R = (size_t)binomial(ca->k, ca->t);
   size_t C = 1;
   for (int i = 0; i < ca->t; i++) {
     C *= (size_t)ca->v;
   }
 
-  int **IToC = get_matrix((int)R, ca->t);
-  t_wise(IToC, ca->k, ca->t);
+  int **IToC = get_matrix(R, (size_t)ca->t);
+  if (IToC == NULL) {
+    return 0;
+  }
+  if (t_wise(IToC, ca->k, ca->t) != 0) {
+    free_matrix(IToC, R);
+    return 0;
+  }
 
   if (ca->P == NULL) {
-    ca->P = get_matrix_uint8(R, C);
+    ca->P = get_matrix_count_calloc(R, C);
     if (ca->P == NULL) {
-      free_matrix(IToC, (int)R);
+      free_matrix(IToC, R);
       return 0;
     }
   }
@@ -195,8 +246,9 @@ int ca_validate(covering_array_t *ca) {
   if (ca->tcomb_counter == NULL) {
     ca->tcomb_counter = get_vector_size_t(R);
     if (ca->tcomb_counter == NULL) {
-      free_matrix(IToC, (int)R);
-      free_matrix_uint8(ca->P, (int)R);
+      free_matrix(IToC, R);
+      free_matrix_count(ca->P, R);
+      ca->P = NULL; /* else ca_destroy frees it a second time */
       return 0;
     }
   }
@@ -211,24 +263,16 @@ int ca_validate(covering_array_t *ca) {
     }
   }
 
+  size_t covered = 0;
   for (int i = 0; i < ca->N; i++) {
     for (size_t j = 0; j < R; j++) {
       int c = get_col(ca->matrix[i], IToC, (int)j, ca->t, ca->v);
       if (c != -1) {
         if (ca->P[j][c] == 0) {
-          ca->covered++;
+          covered++;
           ca->tcomb_counter[j]--;
         }
         ca->P[j][c]++;
-      }
-    }
-  }
-
-  size_t covered = 0;
-  for (size_t i = 0; i < R; i++) {
-    for (size_t j = 0; j < C; j++) {
-      if (ca->P[i][j] > 0) {
-        covered++;
       }
     }
   }
@@ -237,7 +281,7 @@ int ca_validate(covering_array_t *ca) {
   ca->total = R * C;
   int valid = (covered == ca->total);
 
-  free_matrix(IToC, (int)R);
+  free_matrix(IToC, R);
 
   return valid;
 }
@@ -269,9 +313,28 @@ covering_array_t *ca_load(const char *filename) {
   }
   fseek(fp, pointer, SEEK_SET);
 
-  int N, k, v, t;
-  if (fscanf(fp, "%d %d %d ^ %d %d", &N, &k, &v, &k, &t) != 5) {
+  /* The header carries k twice ("N k v ^ k t"). Scan both and require them to
+     agree rather than letting the second silently overwrite the first. */
+  int N, k, v, t, k_repeat;
+  if (fscanf(fp, "%d %d %d ^ %d %d", &N, &k, &v, &k_repeat, &t) != 5) {
     fprintf(stderr, "Error: invalid file format\n");
+    fclose(fp);
+    return NULL;
+  }
+
+  if (k != k_repeat) {
+    fprintf(stderr,
+            "Error: header column counts disagree (%d vs %d) in '%s'\n", k,
+            k_repeat, filename);
+    fclose(fp);
+    return NULL;
+  }
+
+  if (!ca_params_valid(N, k, v, t)) {
+    fprintf(stderr,
+            "Error: unusable parameters in '%s' (N=%d k=%d v=%d t=%d); "
+            "need N in [1,%d], v >= 2, 1 <= t <= k\n",
+            filename, N, k, v, t, CA_COUNT_MAX);
     fclose(fp);
     return NULL;
   }
@@ -284,13 +347,25 @@ covering_array_t *ca_load(const char *filename) {
 
   for (int i = 0; i < N; i++) {
     for (int j = 0; j < k; j++) {
-      if (fscanf(fp, "%d", &ca->matrix[i][j]) != 1) {
+      int cell;
+      if (fscanf(fp, "%d", &cell) != 1) {
         fprintf(stderr, "Error: failed to read matrix element at (%d,%d)\n", i,
                 j);
         ca_destroy(ca);
         fclose(fp);
         return NULL;
       }
+      /* v itself is the wildcard marker get_col() understands; anything
+         outside [0,v] would encode past the end of a P row. */
+      if (cell < 0 || cell > v) {
+        fprintf(stderr,
+                "Error: symbol %d at (%d,%d) in '%s' is outside [0,%d]\n",
+                cell, i, j, filename, v);
+        ca_destroy(ca);
+        fclose(fp);
+        return NULL;
+      }
+      ca->matrix[i][j] = cell;
     }
   }
 
@@ -381,16 +456,23 @@ int ca_add_row(covering_array_t *ca, const int *row) {
     return -1;
   }
 
+  if (ca->N >= CA_COUNT_MAX) {
+    return -1; /* a coverage counter could not hold the new row count */
+  }
+
   if (ca->N >= ca->capacity) {
-    ca->capacity += CA_GROWTH_FACTOR;
-    int **new_matrix = realloc(ca->matrix, ca->capacity * sizeof(int *));
+    /* Only commit the new capacity once the reallocation has succeeded --
+       bumping it first leaves the struct claiming space it does not own. */
+    int new_capacity = ca->capacity + CA_GROWTH_FACTOR;
+    int **new_matrix = realloc(ca->matrix, (size_t)new_capacity * sizeof(int *));
     if (new_matrix == NULL) {
       return -1;
     }
     ca->matrix = new_matrix;
+    ca->capacity = new_capacity;
   }
 
-  ca->matrix[ca->N] = malloc(ca->k * sizeof(int));
+  ca->matrix[ca->N] = malloc((size_t)ca->k * sizeof(int));
   if (ca->matrix[ca->N] == NULL) {
     return -1;
   }
@@ -420,18 +502,24 @@ int ca_add_row_coverage(covering_array_t *ca, const int *row) {
     return -1;
   }
 
-  size_t R = binomial(ca->k, ca->t);
-
-  if (ca->P == NULL) {
+  if (ca->P == NULL || ca->tcomb_counter == NULL) {
     return -1;
   }
 
-  if (ca->tcomb_counter == NULL) {
+  if (!ca_params_valid(ca->N, ca->k, ca->v, ca->t)) {
     return -1;
   }
 
-  int **IToC = get_matrix((int)R, ca->t);
-  t_wise(IToC, ca->k, ca->t);
+  size_t R = (size_t)binomial(ca->k, ca->t);
+
+  int **IToC = get_matrix(R, (size_t)ca->t);
+  if (IToC == NULL) {
+    return -1;
+  }
+  if (t_wise(IToC, ca->k, ca->t) != 0) {
+    free_matrix(IToC, R);
+    return -1;
+  }
 
   for (size_t j = 0; j < R; j++) {
     int c = get_col(row, IToC, (int)j, ca->t, ca->v);
@@ -444,7 +532,7 @@ int ca_add_row_coverage(covering_array_t *ca, const int *row) {
     }
   }
 
-  free_matrix(IToC, (int)R);
+  free_matrix(IToC, R);
 
   return 0;
 }
@@ -459,7 +547,7 @@ int ca_init_random(covering_array_t *ca) {
 
   for (int i = 0; i < ca->N; i++) {
     for (int j = 0; j < ca->k; j++) {
-      ca->matrix[i][j] = rand() % ca->v;
+      ca->matrix[i][j] = rand_below(ca->v);
     }
   }
 
@@ -503,7 +591,7 @@ int ca_init_rotation_position(covering_array_t *ca) {
   }
 
   for (int j = 0; j < ca->k; j++) {
-    ca->matrix[0][j] = rand() % ca->v;
+    ca->matrix[0][j] = rand_below(ca->v);
   }
 
   for (int i = 1; i < ca->N; i++) {
@@ -563,7 +651,7 @@ int ca_init_rotation_full(covering_array_t *ca) {
   }
 
   for (int j = 0; j < ca->k; j++) {
-    ca->matrix[0][j] = rand() % ca->v;
+    ca->matrix[0][j] = rand_below(ca->v);
   }
 
   for (int i = 1; i < ca->N; i++) {

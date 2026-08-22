@@ -1,7 +1,8 @@
 #include "lib/combinatorial.h"
 #include "lib/covering_array.h"
 #include "lib/memory.h"
-#include <math.h>
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,9 @@
 
 char PATH[100], ARCHIVE[100];
 int ROWIN, ROWOUT, EXCLUDE;
+/* Per-candidate tracing is O(NC * nocovered) lines of unbuffered stderr.
+   Off unless -VERBOSE 1 is passed. */
+int VERBOSE;
 #define line_size 1024
 char cadena[line_size];
 
@@ -27,7 +31,7 @@ int **current, **best;
 void readme(char const *name) {
   fprintf(stderr,
           "USAGE: %s -PATH 'out_folder' -FILE 'partialCA' -ROWIN 'int > 0' "
-          "-ROWOUT 'int > 0' [-EXCLUDE 'int']\n",
+          "-ROWOUT 'int > 0' [-EXCLUDE 'int'] [-VERBOSE 1]\n",
           name);
 }
 
@@ -38,19 +42,32 @@ int parsing(int argc, char const *argv[]) {
   ROWIN = 0;
   ROWOUT = 0;
   EXCLUDE = 0;
-  sprintf(PATH, "");
-  sprintf(ARCHIVE, "");
+  VERBOSE = 0;
+  PATH[0] = '\0';
+  ARCHIVE[0] = '\0';
   while (argc > 1) {
     if (strcmp(argv[argc - 2], "-PATH") == 0) {
-      sprintf(PATH, "%s", argv[argc - 1]);
+      /* sprintf into a fixed 100-byte global overflowed on any longer path. */
+      if (snprintf(PATH, sizeof(PATH), "%s", argv[argc - 1]) >=
+          (int)sizeof(PATH)) {
+        fprintf(stderr, "path too long (max %zu)\n", sizeof(PATH) - 1);
+        return 0;
+      }
     } else if (strcmp(argv[argc - 2], "-FILE") == 0) {
-      sprintf(ARCHIVE, "%s", argv[argc - 1]);
+      if (snprintf(ARCHIVE, sizeof(ARCHIVE), "%s", argv[argc - 1]) >=
+          (int)sizeof(ARCHIVE)) {
+        fprintf(stderr, "file name too long (max %zu)\n",
+                sizeof(ARCHIVE) - 1);
+        return 0;
+      }
     } else if (strcmp(argv[argc - 2], "-ROWIN") == 0) {
       ROWIN = atoi(argv[argc - 1]);
     } else if (strcmp(argv[argc - 2], "-ROWOUT") == 0) {
       ROWOUT = atoi(argv[argc - 1]);
     } else if (strcmp(argv[argc - 2], "-EXCLUDE") == 0) {
       EXCLUDE = atoi(argv[argc - 1]);
+    } else if (strcmp(argv[argc - 2], "-VERBOSE") == 0) {
+      VERBOSE = atoi(argv[argc - 1]);
     } else {
       fprintf(stderr, "bad parameter %s\n", argv[argc - 2]);
       return 0;
@@ -91,11 +108,9 @@ int evaluate(int selRow, int nocovered) {
     }
   }
 
-  fprintf(stderr, "\nDelta:%d Nocover:%d\n", delta, nocovered);
-
-  int idx[nocovered];
-  int flag = 0;
-  shuffle(idx, nocovered);
+  if (VERBOSE) {
+    fprintf(stderr, "\nDelta:%d Nocover:%d\n", delta, nocovered);
+  }
 
   for (i = 0; i < ROWOUT; ++i) {
     for (j = 0; j < k; ++j) {
@@ -103,15 +118,32 @@ int evaluate(int selRow, int nocovered) {
     }
   }
 
-  fprintf(stderr, "Target Fill\n");
-  for (i = 0; i < nocovered; ++i) {
-    fprintf(stderr, "[%d %d]\n", M[idx[i]][0], M[idx[i]][1]);
+  /* nocovered is derived from the input file, so this must not be a stack VLA. */
+  int *idx = NULL;
+  if (nocovered > 0) {
+    idx = get_vector((size_t)nocovered);
+    if (idx == NULL) {
+      fprintf(stderr, "Error: out of memory in evaluate()\n");
+      exit(-1);
+    }
+    shuffle(idx, nocovered);
+  }
+
+  int flag = 0;
+
+  if (VERBOSE) {
+    fprintf(stderr, "Target Fill\n");
+    for (i = 0; i < nocovered; ++i) {
+      fprintf(stderr, "[%d %d]\n", M[idx[i]][0], M[idx[i]][1]);
+    }
   }
 
   int new = 0;
   for (i = 0; i < nocovered; ++i) {
     for (j = 0; j < ROWOUT; ++j) {
-      inv_ruffini(alph, M[idx[i]][1], v, t);
+      if (inv_ruffini(alph, M[idx[i]][1], v, t) != 0) {
+        continue;
+      }
       flag = 1;
       for (h = 0; h < t; ++h) {
         if (current[j][IToC[M[idx[i]][0]][h]] != alph[h] &&
@@ -125,13 +157,17 @@ int evaluate(int selRow, int nocovered) {
           current[j][IToC[M[idx[i]][0]][h]] = alph[h];
         }
         new ++;
-        fprintf(stderr, "%d setted in %d \n", i, j);
+        if (VERBOSE) {
+          fprintf(stderr, "%d setted in %d \n", i, j);
+        }
         break;
       }
     }
   }
 
-  fprintf(stderr, "%d / %d\n", new, nocovered);
+  if (VERBOSE) {
+    fprintf(stderr, "%d / %d\n", new, nocovered);
+  }
 
   for (i = 0; i < ROWIN; ++i) {
     for (j = 0; j < KC; ++j) {
@@ -144,6 +180,8 @@ int evaluate(int selRow, int nocovered) {
       }
     }
   }
+
+  free_vector(idx);
 
   return nocovered - new;
 }
@@ -178,16 +216,48 @@ int main(int argc, char const *argv[]) {
 
   fprintf(stderr, "CA(%d;%d,%d,%d)\n", N, t, k, v);
 
-  R = binomial(k, t);
-  C = pow(v, t);
-  P = get_matrix(R, C);
-  NC = binomial(N - EXCLUDE, ROWIN);
+  uint64_t R64 = binomial(k, t);
+  uint64_t NC64 = binomial(N - EXCLUDE, ROWIN);
+  if (!binomial_is_usable(R64) || R64 == 0 || R64 > INT_MAX ||
+      !binomial_is_usable(NC64) || NC64 == 0 || NC64 > INT_MAX) {
+    fprintf(stderr, "Error: parameters too large for this tool\n");
+    ca_destroy(ca);
+    exit(-1);
+  }
+  R = (int)R64;
+
+  /* Integer power: pow() returns a double and can land on the wrong integer. */
+  C = 1;
+  for (int e = 0; e < t; ++e) {
+    if (C > INT_MAX / v) {
+      fprintf(stderr, "Error: v^t overflows\n");
+      ca_destroy(ca);
+      exit(-1);
+    }
+    C *= v;
+  }
+  if (R > INT_MAX / C) {
+    fprintf(stderr, "Error: R * C overflows\n");
+    ca_destroy(ca);
+    exit(-1);
+  }
+
+  NC = (int)NC64;
   KC = R;
+  P = get_matrix(R, C);
   IToC = get_matrix(KC, t);
   IToR = get_matrix(NC, ROWIN);
+  if (P == NULL || IToC == NULL || IToR == NULL) {
+    fprintf(stderr, "Error: out of memory\n");
+    ca_destroy(ca);
+    exit(-1);
+  }
 
-  t_wise(IToC, k, t);
-  t_wise(IToR, N - EXCLUDE, ROWIN);
+  if (t_wise(IToC, k, t) != 0 || t_wise(IToR, N - EXCLUDE, ROWIN) != 0) {
+    fprintf(stderr, "Error: invalid t/ROWIN for this array\n");
+    ca_destroy(ca);
+    exit(-1);
+  }
 
   for (i = 0; i < R; ++i) {
     for (j = 0; j < C; ++j) {
@@ -220,8 +290,10 @@ int main(int argc, char const *argv[]) {
     }
   }
 
-  for (i = 0; i < nocovered; ++i) {
-    fprintf(stderr, "%d %d\n", M[i][0], M[i][1]);
+  if (VERBOSE) {
+    for (i = 0; i < nocovered; ++i) {
+      fprintf(stderr, "%d %d\n", M[i][0], M[i][1]);
+    }
   }
 
   current = get_matrix(ROWOUT, k);
@@ -246,7 +318,12 @@ int main(int argc, char const *argv[]) {
     }
   }
 
-  int print[N];
+  int *print = get_vector((size_t)N);
+  if (print == NULL) {
+    fprintf(stderr, "Error: out of memory\n");
+    ca_destroy(ca);
+    exit(-1);
+  }
   for (i = 0; i < N; ++i) {
     print[i] = 1;
   }
@@ -298,6 +375,7 @@ int main(int argc, char const *argv[]) {
   free_matrix(IToR, NC);
   free_matrix(IToC, KC);
   free_matrix(P, R);
+  free_vector(print);
 
   return 0;
 }

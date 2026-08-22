@@ -28,8 +28,9 @@ int main(int argc, char *argv[]) {
   int k = atoi(argv[3]); /* Number of columns */
   int v = atoi(argv[4]); /* Alphabet size (values per column) */
 
-  if (N <= 0 || t <= 0 || k <= 0 || v <= 0) {
-    fprintf(stderr, "Error: all parameters must be positive\n");
+  if (!ca_params_valid(N, k, v, t)) {
+    fprintf(stderr,
+            "Error: unusable parameters (need N >= 1, v >= 2, 1 <= t <= k)\n");
     return 1;
   }
 
@@ -48,7 +49,7 @@ int main(int argc, char *argv[]) {
   /* Fill matrix with random values from 0 to v-1 */
   for (int i = 0; i < N; i++) {
     for (int j = 0; j < k; j++) {
-      ca->matrix[i][j] = rand() % v;
+      ca->matrix[i][j] = rand_below(v);
     }
   }
 
@@ -99,14 +100,14 @@ int main(int argc, char *argv[]) {
   /* ========================================================================
    * STEP 5: Pick a random cell to modify
    * ======================================================================== */
-  int row_idx = rand() % N;
-  int col_idx = rand() % k;
+  int row_idx = rand_below(N);
+  int col_idx = rand_below(k);
   int old_val = ca->matrix[row_idx][col_idx];
 
   /* Ensure new value is different from old */
   int new_val;
   do {
-    new_val = rand() % v;
+    new_val = rand_below(v);
   } while (new_val == old_val);
 
   printf("\n=== Updating cell (%d, %d) from %d to %d ===\n", row_idx, col_idx,
@@ -204,7 +205,7 @@ int main(int argc, char *argv[]) {
   }
   ca_validate(ca_verify);
 
-  size_t R = binomial(k, t);
+  size_t R = (size_t)binomial(k, t);
   size_t C = 1;
   for (int i = 0; i < t; i++) {
     C *= (size_t)v;

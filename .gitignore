@@ -8,6 +8,7 @@ validator_asan
 output_*/
 
 # Executables
+extend_coverage
 dump
 gen_ca
 gen_ca_optimized
@@ -34,3 +35,13 @@ examples/update_coverage
 # Temp files
 *.tmp
 *.log
+
+# Dependency sidecars from -MMD -MP
+*.d
+
+# Test/demo binaries added by the audit
+unittests/demo_init
+unittests/demo_precompute
+
+# Tooling
+compile_commands.json
