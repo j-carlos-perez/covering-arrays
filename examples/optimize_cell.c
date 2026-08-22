@@ -62,8 +62,9 @@ int main(int argc, char *argv[]) {
   int v = atoi(argv[4]);
   const char *output_folder = argv[5];
 
-  if (N <= 0 || t <= 0 || k <= 0 || v <= 0) {
-    fprintf(stderr, "Error: all parameters must be positive\n");
+  if (!ca_params_valid(N, k, v, t)) {
+    fprintf(stderr,
+            "Error: unusable parameters (need N >= 1, v >= 2, 1 <= t <= k)\n");
     return 1;
   }
 

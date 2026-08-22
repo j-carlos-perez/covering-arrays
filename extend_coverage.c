@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
   }
 
   for (int j = 0; j < ca->k; j++) {
-    new_row[j] = rand() % ca->v;
+    new_row[j] = rand_below(ca->v);
   }
 
   printf("Adding new random row: ");

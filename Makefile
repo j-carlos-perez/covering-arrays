@@ -1,12 +1,17 @@
 UNAME_S := $(shell uname -s)
 
+# -MMD -MP emit a .d sidecar per object listing its headers, so editing a header
+# rebuilds every object that includes it. Without this a struct layout change
+# (e.g. the type of covering_array_t::P) silently produces mismatched objects.
+DEPFLAGS = -MMD -MP
+
 ifeq ($(UNAME_S),Darwin)
     CC = clang
-    CFLAGS = -Wall -Wextra -I. -I/opt/homebrew/opt/libomp/include -Xclang -fopenmp -O3 -march=native -flto
+    CFLAGS = -Wall -Wextra -I. -I/opt/homebrew/opt/libomp/include -Xclang -fopenmp -O3 -march=native -flto $(DEPFLAGS)
     LDFLAGS = -Xclang -fopenmp -flto -L/opt/homebrew/opt/libomp/lib -lomp
 else
     CC = gcc
-    CFLAGS = -Wall -Wextra -I. -fopenmp -O3 -march=native -flto
+    CFLAGS = -Wall -Wextra -I. -fopenmp -O3 -march=native -flto $(DEPFLAGS)
     LDFLAGS = -fopenmp -flto
 endif
 
@@ -26,23 +31,29 @@ CA_TEST_SRC = unittests/test_covering_array.c unittests/unity.c
 CA_TEST_OBJ = $(CA_TEST_SRC:.c=.o)
 CA_TEST_BIN = test_covering_array_runner
 
-PV_TEST_SRC = unittests/test_parallel_validator.c unittests/unity.c
-PV_TEST_OBJ = $(PV_TEST_SRC:.c=.o)
-PV_TEST_BIN = test_parallel_runner
+REGRESSION_SRC = unittests/test_regression.c unittests/unity.c
+REGRESSION_OBJ = $(REGRESSION_SRC:.c=.o)
+REGRESSION_BIN = test_regression_runner
+
+# Standalone self-checking tests: own main(), non-zero exit on failure.
+GRAY_BIN = test_gray_runner
+PERM_BIN = test_permutation_runner
+
+# Standalone demos: own main(), no assertions. Built to keep them compiling.
+DEMO_BINS = unittests/demo_init unittests/demo_precompute
 
 NON_TEST_BINS = validator dump gen_ca gen_ca_optimized validator_parallel \
                 examples/update_coverage examples/optimize_cell \
                 examples/optimize_cell_file examples/optimize_tcolumns \
                 examples/optimize_tcolumns_file extend_coverage
 
-TEST_BINS = $(TEST_BIN) $(CA_TEST_BIN)
+TEST_BINS = $(TEST_BIN) $(CA_TEST_BIN) $(REGRESSION_BIN) $(GRAY_BIN) $(PERM_BIN)
+
+ALL_OBJ = $(OBJ) $(LIB_OBJ) $(PV_OBJ) $(TEST_OBJ) $(CA_TEST_OBJ) $(REGRESSION_OBJ)
 
 all: $(NON_TEST_BINS)
 
-build: $(NON_TEST_BINS) $(LIB_OBJ) $(TEST_OBJ) $(CA_TEST_OBJ) $(PV_OBJ)
-	$(CC) $(CFLAGS) -o $(TEST_BIN) $(LIB_OBJ) $(TEST_OBJ)
-	$(CC) $(CFLAGS) -o $(CA_TEST_BIN) $(LIB_OBJ) $(CA_TEST_OBJ)
-	@echo "NOTE: test_parallel_runner skipped (unittests/test_parallel_validator.c missing)"
+build: $(NON_TEST_BINS) $(TEST_BINS) $(DEMO_BINS)
 
 dump: dump.c $(LIB_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ -lm
@@ -53,15 +64,35 @@ $(TARGET): $(OBJ)
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-test: $(LIB_OBJ) $(TEST_OBJ) $(CA_TEST_OBJ)
-	$(CC) $(CFLAGS) -o $(TEST_BIN) $(LIB_OBJ) $(TEST_OBJ)
-	./$(TEST_BIN)
-	$(CC) $(CFLAGS) -o $(CA_TEST_BIN) $(LIB_OBJ) $(CA_TEST_OBJ)
-	./$(CA_TEST_BIN)
+$(TEST_BIN): $(LIB_OBJ) $(TEST_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
 
-pv_test: $(LIB_OBJ) $(PV_OBJ) $(PV_TEST_OBJ)
-	$(CC) $(CFLAGS) -o $(PV_TEST_BIN) $^
-	./$(PV_TEST_BIN)
+$(CA_TEST_BIN): $(LIB_OBJ) $(CA_TEST_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(REGRESSION_BIN): $(LIB_OBJ) $(PV_OBJ) $(REGRESSION_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(GRAY_BIN): unittests/test_gray.c $(LIB_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(PERM_BIN): unittests/test_permutation.c $(LIB_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
+
+unittests/demo_init: unittests/test_init.c $(LIB_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
+
+unittests/demo_precompute: unittests/test_precompute.c $(LIB_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
+
+test: $(TEST_BINS)
+	./$(TEST_BIN)
+	./$(CA_TEST_BIN)
+	./$(REGRESSION_BIN)
+	./$(GRAY_BIN)
+	./$(PERM_BIN)
+
+demos: $(DEMO_BINS)
 
 validator_parallel: $(LIB_OBJ) $(PV_OBJ) ops/validator_parallel.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
@@ -93,9 +124,13 @@ extend_coverage: extend_coverage.c $(LIB_OBJ) $(PV_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 test_clean:
-	rm -f $(TEST_OBJ) $(CA_TEST_OBJ) $(TEST_BINS)
+	rm -f $(TEST_OBJ) $(CA_TEST_OBJ) $(REGRESSION_OBJ) $(TEST_BINS) $(DEMO_BINS)
+	rm -f $(TEST_OBJ:.o=.d) $(CA_TEST_OBJ:.o=.d) $(REGRESSION_OBJ:.o=.d)
 
 clean:
-	rm -f $(OBJ) $(TARGET) gen_ca gen_ca_optimized examples/update_coverage examples/optimize_cell examples/optimize_cell_file validator_parallel $(PV_OBJ) $(TEST_BINS)
+	rm -f $(ALL_OBJ) $(ALL_OBJ:.o=.d)
+	rm -f $(NON_TEST_BINS) $(TEST_BINS) $(DEMO_BINS)
 
-.PHONY: all build clean test test_clean dump examples pv_test
+-include $(ALL_OBJ:.o=.d)
+
+.PHONY: all build clean test test_clean demos examples

@@ -16,11 +16,16 @@
  * The P matrix: P[j][c] = how many rows cover the j-th column t-set with combo c.
  * The tcomb_counter: tcomb_counter[j] = remaining uncovered combos in row j (initially C).
  * 
- * Requires ca->P and ca->tcomb_counter to be NULL (will allocate if needed).
- * Does NOT reset existing values; accumulates on top of previous coverage.
+ * Idempotent: P and tcomb_counter are both reset before counting, so calling
+ * this twice on the same array gives the same answer as calling it once, and
+ * the result always agrees with ca_validate(). (P used to be left holding the
+ * previous run's counts while tcomb_counter was reset, so a second call
+ * double-counted P and reported combinations as uncovered that were not.)
  */
 void pv_validate(covering_array_t *ca) {
   if (ca == NULL || ca->matrix == NULL)
+    return;
+  if (!ca_params_valid(ca->N, ca->k, ca->v, ca->t))
     return;
 
   size_t R = (size_t)binomial(ca->k, ca->t);
@@ -30,13 +35,18 @@ void pv_validate(covering_array_t *ca) {
 
   int num_threads = omp_get_max_threads();
 
-  int **IToC = get_matrix((int)R, ca->t);
-  t_wise(IToC, ca->k, ca->t);
+  int **IToC = get_matrix(R, (size_t)ca->t);
+  if (IToC == NULL)
+    return;
+  if (t_wise(IToC, ca->k, ca->t) != 0) {
+    free_matrix(IToC, R);
+    return;
+  }
 
   if (ca->P == NULL) {
-    ca->P = get_matrix_uint8_calloc(R, C);
+    ca->P = get_matrix_count_calloc(R, C);
     if (ca->P == NULL) {
-      free_matrix(IToC, (int)R);
+      free_matrix(IToC, R);
       return;
     }
   }
@@ -44,13 +54,17 @@ void pv_validate(covering_array_t *ca) {
   if (ca->tcomb_counter == NULL) {
     ca->tcomb_counter = get_vector_size_t(R);
     if (ca->tcomb_counter == NULL) {
-      free_matrix(IToC, (int)R);
-      free_matrix_uint8(ca->P, R);
+      free_matrix(IToC, R);
+      free_matrix_count(ca->P, R);
+      ca->P = NULL; /* else ca_destroy frees it a second time */
       return;
     }
   }
+
   for (size_t i = 0; i < R; i++) {
     ca->tcomb_counter[i] = C;
+    for (size_t j = 0; j < C; j++)
+      ca->P[i][j] = 0;
   }
 #pragma omp parallel num_threads(num_threads)
   {
@@ -84,5 +98,5 @@ void pv_validate(covering_array_t *ca) {
   ca->covered = covered;
   ca->total = R * C;
 
-  free_matrix(IToC, (int)R);
+  free_matrix(IToC, R);
 }

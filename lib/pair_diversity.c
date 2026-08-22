@@ -1,4 +1,5 @@
 #include "pair_diversity.h"
+#include "combinatorial.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -45,7 +46,7 @@ static int pd_fill_balanced_random_row(int *row, int k, int v) {
   }
 
   for (int i = v - 1; i > 0; i--) {
-    int j = rand() % (i + 1);
+    int j = rand_below(i + 1);
     int tmp = symbols[i];
     symbols[i] = symbols[j];
     symbols[j] = tmp;
@@ -56,7 +57,7 @@ static int pd_fill_balanced_random_row(int *row, int k, int v) {
 
   for (int col = 0; col < k; col++) {
     int slots_left = k - col;
-    int pick = rand() % slots_left;
+    int pick = rand_below(slots_left);
     int cumulative = 0;
     int chosen = -1;
 
@@ -196,8 +197,8 @@ int pd_generate_balanced_seed(int k, int v, int restarts, int iterations,
     }
 
     for (int step = 0; step < iterations; step++) {
-      int i = rand() % k;
-      int j = rand() % k;
+      int i = rand_below(k);
+      int j = rand_below(k);
       if (i == j) {
         continue;
       }

@@ -43,11 +43,6 @@ static inline uint32_t next_pow2_u32(uint32_t x) {
   return x + 1;
 }
 
-typedef struct {
-  uint64_t key;
-  uint32_t index;
-} Entry;
-
 /*
  * Creates a new Set64 hash set with Robin Hood probing.
  * 
@@ -64,7 +59,11 @@ Set64 *set64_create(uint32_t initial_capacity) {
     return NULL;
 
   s->cap = next_pow2_u32(initial_capacity);
-  s->tcap = next_pow2_u32(s->cap * 2);
+  if (s->cap > (UINT32_MAX / 2)) {
+    free(s);
+    return NULL;
+  }
+  s->tcap = s->cap * 2; /* both are powers of two already */
   s->mask = s->tcap - 1;
   s->size = 0;
 
@@ -103,13 +102,35 @@ void set64_free(Set64 *s) {
  * Used when load factor exceeds threshold.
  * Robin Hood swapping preserves probe distance invariants.
  */
-static void set64_rehash(Set64 *s) {
+static int set64_rehash(Set64 *s) {
   uint32_t old_tcap = s->tcap;
   Set64Entry *old_tab = s->table;
 
-  s->tcap <<= 1;
+  uint32_t new_tcap = s->tcap << 1;
+  if (new_tcap < s->tcap) {
+    return 0; /* capacity overflow */
+  }
+
+  /* dense[] must grow with the table. It holds one slot per live element and
+     is indexed by s->size, but growth used to be gated on max_fill (0.7 *
+     tcap == 1.4 * cap), so insert number cap+1 wrote past its end. */
+  uint32_t new_cap = new_tcap / 2;
+  uint64_t *new_dense =
+      (uint64_t *)realloc(s->dense, sizeof(uint64_t) * new_cap);
+  if (new_dense == NULL) {
+    return 0;
+  }
+  s->dense = new_dense;
+  s->cap = new_cap;
+
+  Set64Entry *new_tab = (Set64Entry *)malloc(sizeof(Set64Entry) * new_tcap);
+  if (new_tab == NULL) {
+    return 0;
+  }
+
+  s->tcap = new_tcap;
   s->mask = s->tcap - 1;
-  s->table = (Set64Entry *)malloc(sizeof(Set64Entry) * s->tcap);
+  s->table = new_tab;
 
   for (uint32_t i = 0; i < s->tcap; i++)
     s->table[i].key = SET64_EMPTY_KEY;
@@ -153,16 +174,61 @@ static void set64_rehash(Set64 *s) {
   }
 
   free(old_tab);
+  return 1;
+}
+
+/*
+ * Locates a key in the hash table.
+ * Returns the table position, or -1 if the key is absent.
+ *
+ * The early exit is the Robin Hood invariant: every entry sits at least as far
+ * from its home slot as anything inserted before it, so once we are further
+ * from home than the entry we are looking at, our key cannot be further along.
+ * That invariant only holds while the table has no tombstones, which is why
+ * deletion below shifts entries back instead of marking them.
+ */
+static int32_t set64_find(const Set64 *s, uint64_t key) {
+  uint32_t pos = mix64(key) & s->mask;
+  uint32_t dist = 0;
+
+  while (true) {
+    uint64_t k = s->table[pos].key;
+
+    if (k == SET64_EMPTY_KEY)
+      return -1;
+    if (k == key)
+      return (int32_t)pos;
+
+    uint32_t home = mix64(k) & s->mask;
+    uint32_t other_dist = (pos - home) & s->mask;
+
+    if (other_dist < dist)
+      return -1;
+
+    pos = (pos + 1) & s->mask;
+    dist++;
+  }
 }
 
 /*
  * Inserts a key into the set using Robin Hood hashing.
- * If the set is at capacity, automatically rehashing occurs.
- * Duplicate keys are ignored.
+ * Grows the table (and the dense array with it) when the load factor is hit.
+ * Duplicate keys are ignored, as documented -- the previous version appended
+ * them to dense[] and inflated size.
  */
 void set64_insert(Set64 *s, uint64_t key) {
-  if (s->size >= s->max_fill) {
-    set64_rehash(s);
+  if (s == NULL || key <= SET64_DELETED_KEY) {
+    return; /* 0 and 1 are reserved sentinels */
+  }
+
+  if (set64_find(s, key) >= 0) {
+    return;
+  }
+
+  if (s->size >= s->max_fill || s->size >= s->cap) {
+    if (!set64_rehash(s)) {
+      return; /* out of memory: leave the set untouched rather than overrun it */
+    }
   }
 
   uint32_t pos = mix64(key) & s->mask;
@@ -173,7 +239,7 @@ void set64_insert(Set64 *s, uint64_t key) {
   s->size++;
 
   while (true) {
-    if (s->table[pos].key <= SET64_DELETED_KEY) {
+    if (s->table[pos].key == SET64_EMPTY_KEY) {
       s->table[pos].key = key;
       s->table[pos].index = idx;
       return;
@@ -200,64 +266,78 @@ void set64_insert(Set64 *s, uint64_t key) {
 }
 
 /*
- * Searches for a key in the hash table.
- * Returns the position if found, or -1 if not found.
- * Uses probe distance to terminate early when past home position.
- */
-static int32_t set64_find(Set64 *s, uint64_t key) {
-  uint32_t pos = mix64(key) & s->mask;
-  uint32_t dist = 0;
-
-  while (true) {
-    uint64_t k = s->table[pos].key;
-
-    if (k == SET64_EMPTY_KEY)
-      return -1;
-    if (k == key)
-      return (int32_t)pos;
-
-    uint32_t home = mix64(k) & s->mask;
-    uint32_t other_dist = (pos - home) & s->mask;
-
-    if (other_dist < dist)
-      return -1;
-
-    pos = (pos + 1) & s->mask;
-    dist++;
-  }
-}
-
-/*
  * Removes a key from the set.
- * Swaps the deleted entry with the last element in dense array to maintain consistency.
- * Returns true if deleted, false if key was not found.
+ *
+ * dense[] is kept compact by moving the last element into the freed slot. The
+ * table entry is removed by backward-shift deletion: following entries that
+ * are not already at their home slot move back one position, which keeps the
+ * Robin Hood invariant that set64_find() relies on. Tombstones would break it.
+ *
+ * Returns true if deleted, false if the key was not present.
  */
 bool set64_delete(Set64 *s, uint64_t key) {
-  int32_t pos = set64_find(s, key);
-  if (pos < 0)
+  if (s == NULL || s->size == 0) {
     return false;
+  }
 
+  int32_t found = set64_find(s, key);
+  if (found < 0) {
+    return false;
+  }
+  uint32_t pos = (uint32_t)found;
   uint32_t idx = s->table[pos].index;
+
+  /* Compact dense[] first: locating `last` must happen while the table is
+     still intact. */
   uint64_t last = s->dense[s->size - 1];
-
-  s->dense[idx] = last;
-
-  int32_t last_pos = set64_find(s, last);
-  s->table[last_pos].index = idx;
-
+  if (last != key) {
+    int32_t last_pos = set64_find(s, last);
+    if (last_pos < 0) {
+      return false; /* table corrupt; refuse rather than write to table[-1] */
+    }
+    s->dense[idx] = last;
+    s->table[last_pos].index = idx;
+  }
   s->size--;
 
-  s->table[pos].key = SET64_DELETED_KEY;
+  /* Backward-shift deletion. Terminates because max_fill < tcap guarantees at
+     least one empty slot. */
+  uint32_t i = pos;
+  uint32_t j = (pos + 1) & s->mask;
+  while (s->table[j].key != SET64_EMPTY_KEY) {
+    uint32_t home = mix64(s->table[j].key) & s->mask;
+    if (((j - home) & s->mask) == 0) {
+      break; /* already at its home slot: cannot move back */
+    }
+    s->table[i] = s->table[j];
+    i = j;
+    j = (j + 1) & s->mask;
+  }
+  s->table[i].key = SET64_EMPTY_KEY;
+
   return true;
 }
 
 /*
  * Returns a uniformly random element from the set.
- * Uses fast_rand_u32() for sampling the dense array index.
  * Returns SET64_EMPTY_KEY if the set is empty.
+ *
+ * Rejection sampling, not `rand & (size - 1)`: masking is only uniform when
+ * size is a power of two, and for e.g. size 6 it can only ever produce four of
+ * the six indices.
  */
 uint64_t set64_random(Set64 *s) {
-  if (s->size == 0)
+  if (s == NULL || s->size == 0)
     return SET64_EMPTY_KEY;
-  return s->dense[fast_rand_u32() & (s->size - 1)];
+
+  uint32_t n = s->size;
+  /* Largest multiple of n that fits in uint32_t; draws above it are rejected
+     so every index is equally likely. */
+  uint32_t limit = UINT32_MAX - (UINT32_MAX % n);
+  uint32_t r;
+  do {
+    r = fast_rand_u32();
+  } while (r >= limit);
+
+  return s->dense[r % n];
 }

@@ -1,10 +1,37 @@
 #ifndef COMBINATORIAL_H
 #define COMBINATORIAL_H
 
+#include <stdint.h>
+
+/* Returned by binomial() when C(k,r) does not fit in a uint64_t. */
+#define BINOMIAL_OVERFLOW UINT64_MAX
+
+/*
+ * Uniform random integer in [0, bound).
+ *
+ * `rand() % bound` is biased whenever bound does not divide RAND_MAX+1: the
+ * low residues occur once more often than the high ones. That skew works
+ * directly against the balanced initialisers, whose whole purpose is to
+ * control the symbol distribution. Returns 0 for bound <= 0.
+ */
+int rand_below(int bound);
+
 void shuffle(int *array, int n);
-int binomial(int k, int r);
+
+/*
+ * C(k, r), computed without overflowing an intermediate.
+ * Returns 0 when r < 0, k < 0, or k < r; BINOMIAL_OVERFLOW if the result
+ * does not fit in a uint64_t. Callers that use the result as an allocation
+ * size must check for both.
+ */
+uint64_t binomial(int k, int r);
+
+/* Non-zero if n is a usable count (neither the overflow marker nor larger
+ * than what the platform can index). */
+int binomial_is_usable(uint64_t n);
+
 int t_wise(int **GTP, int k, int t);
-void inv_ruffini(int *V, int num, int v, int t);
+int inv_ruffini(int *V, int num, int v, int t);
 int get_col(const int *line, int **IToC, int j, int t, int v);
 
 int **generate_t_combinations(int k, int t, int *out_n);
