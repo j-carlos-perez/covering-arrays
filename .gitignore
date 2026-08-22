@@ -18,6 +18,9 @@ validator
 sweep.sh
 examples/optimize_*
 examples/update_coverage
+examples/recipe_enumerate
+examples/recipe_greedy_rows
+examples/recipe_hill_climb
 
 # Editor/IDE
 .vscode/

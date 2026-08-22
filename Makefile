@@ -42,10 +42,16 @@ PERM_BIN = test_permutation_runner
 # Standalone demos: own main(), no assertions. Built to keep them compiling.
 DEMO_BINS = unittests/demo_init unittests/demo_precompute
 
+# Worked examples from docs/README.md. They are built with everything else so
+# a signature change breaks the build rather than silently rotting the docs.
+RECIPE_BINS = examples/recipe_enumerate examples/recipe_greedy_rows \
+              examples/recipe_hill_climb
+
 NON_TEST_BINS = validator dump gen_ca gen_ca_optimized validator_parallel \
                 examples/update_coverage examples/optimize_cell \
                 examples/optimize_cell_file examples/optimize_tcolumns \
-                examples/optimize_tcolumns_file extend_coverage
+                examples/optimize_tcolumns_file extend_coverage \
+                $(RECIPE_BINS)
 
 TEST_BINS = $(TEST_BIN) $(CA_TEST_BIN) $(REGRESSION_BIN) $(GRAY_BIN) $(PERM_BIN)
 
@@ -103,7 +109,7 @@ gen_ca: gen_ca.c $(LIB_OBJ)
 gen_ca_optimized: gen_ca_optimized.c $(LIB_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 
-examples: examples/update_coverage examples/optimize_cell examples/optimize_cell_file examples/optimize_tcolumns examples/optimize_tcolumns_file
+examples: examples/update_coverage examples/optimize_cell examples/optimize_cell_file examples/optimize_tcolumns examples/optimize_tcolumns_file $(RECIPE_BINS)
 
 examples/update_coverage: examples/update_coverage.c $(LIB_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
@@ -118,6 +124,15 @@ examples/optimize_tcolumns: examples/optimize_tcolumns.c $(LIB_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 
 examples/optimize_tcolumns_file: examples/optimize_tcolumns_file.c $(LIB_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
+
+examples/recipe_enumerate: examples/recipe_enumerate.c $(LIB_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
+
+examples/recipe_greedy_rows: examples/recipe_greedy_rows.c $(LIB_OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
+
+examples/recipe_hill_climb: examples/recipe_hill_climb.c $(LIB_OBJ)
 	$(CC) $(CFLAGS) -o $@ $^
 
 extend_coverage: extend_coverage.c $(LIB_OBJ) $(PV_OBJ)

@@ -46,3 +46,29 @@ With $v=3$ and $t=2$, each pair of columns must contain all $3^2 = 9$ possible c
 
 This repository contains implementations for working with covering arrays, including combinatorial utilities and verification tools.
 
+## Documentation
+
+**[docs/README.md](docs/README.md)** — library guide: the index scheme shared by
+`P`, `tcomb_counter` and the precompute tables, the required call order, ownership
+rules, and the invariants the incremental search layer maintains. Read this before
+composing the `lib/` modules into a new algorithm.
+
+Per-function contracts (preconditions, ownership, return values, operation counts)
+live in the headers, `lib/*.h`.
+
+Worked examples under `examples/` are built by `make examples`:
+
+| Program | Shows |
+| --- | --- |
+| `recipe_enumerate` | Column-set enumeration and tuple encode/decode, with no array involved |
+| `recipe_greedy_rows` | Building an array by repeatedly appending the best candidate row |
+| `recipe_hill_climb` | Incremental local search over cells, checked against a full recompute |
+
+## Building
+
+```sh
+make all      # tools: validator, validator_parallel, gen_ca, dump, extend_coverage
+make examples # the worked examples above
+make test     # unit and regression suites
+```
+
