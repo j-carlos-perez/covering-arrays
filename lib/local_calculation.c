@@ -2,6 +2,15 @@
 #include "combinatorial.h"
 #include <stddef.h>
 
+static int cell_args_valid(const covering_array_t *ca,
+                           const ca_affected_t *pre, int **IToC,
+                           int row_idx, int col_idx, int new_val) {
+  return ca != NULL && pre != NULL && IToC != NULL && ca->matrix != NULL &&
+         ca->P != NULL && ca->total != 0 && row_idx >= 0 && row_idx < ca->N &&
+         col_idx >= 0 && col_idx < ca->k && new_val >= 0 && new_val <= ca->v &&
+         pre->k == (size_t)ca->k && pre->t == (size_t)ca->t;
+}
+
 /*
  * Computes the coverage delta when changing a single cell value.
  *
@@ -17,7 +26,7 @@
 ssize_t ca_compute_cell_delta(covering_array_t *ca, const ca_affected_t *pre,
                               int **IToC, int row_idx, int col_idx,
                               int new_val) {
-  if (ca == NULL || pre == NULL || IToC == NULL || ca->P == NULL) {
+  if (!cell_args_valid(ca, pre, IToC, row_idx, col_idx, new_val)) {
     return 0;
   }
 
@@ -79,7 +88,7 @@ ssize_t ca_compute_cell_delta(covering_array_t *ca, const ca_affected_t *pre,
 ssize_t ca_apply_cell_change(covering_array_t *ca, const ca_affected_t *pre,
                              int **IToC, int row_idx, int col_idx,
                              int new_val) {
-  if (ca == NULL || pre == NULL || IToC == NULL || ca->P == NULL ||
+  if (!cell_args_valid(ca, pre, IToC, row_idx, col_idx, new_val) ||
       ca->tcomb_counter == NULL) {
     return 0;
   }

@@ -34,7 +34,8 @@ typedef struct pd_score {
  *
  * Ownership: reads k ints from seed; writes the score into out_score.
  * Returns:   0 on success; -1 if seed or out_score is NULL, k < 2, v < 1, or
- *            any symbol falls outside [0, v-1].
+ *            any symbol falls outside [0, v-1], or the pair space or score
+ *            bounds do not fit their public integer types.
  * Cost:      (k-1) lags x k pairs, plus a v*v sweep per lag.
  */
 int pd_evaluate_seed(const int *seed, int k, int v, pd_score_t *out_score);
@@ -49,13 +50,15 @@ int pd_evaluate_seed(const int *seed, int k, int v, pd_score_t *out_score);
  * The best row across all restarts is returned.
  *
  * restarts <= 0 selects 64. iterations <= 0 selects max(400, 20*k*k) swaps per
- * restart. Note the total work scales steeply with k: each of the
+ * restart, or fails if that value exceeds INT_MAX. Note the total work scales
+ * steeply with k: each of the
  * restarts * iterations steps rescores the whole seed.
  *
  * Ownership:     writes k ints into out_seed, which the caller provides.
  *                out_score may be NULL if the score is not needed.
  * Returns:       0 on success; -1 if out_seed is NULL, k < 2, v < 1, or
- *                allocation fails.
+ *                allocation fails, or score/default-iteration arithmetic is
+ *                not representable.
  * Thread safety: NOT reentrant -- draws from the global rand() sequence.
  */
 int pd_generate_balanced_seed(int k, int v, int restarts, int iterations,

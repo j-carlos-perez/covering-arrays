@@ -47,8 +47,8 @@ typedef struct {
  *
  * k and t must match the array you intend to use this with: the indices stored
  * here are only meaningful against a C(k,t) column-set ordering built with the
- * same parameters. Nothing checks this at use time, so a mismatch is silent
- * corruption rather than an error.
+ * same parameters. The library delta functions reject a mismatch, but callers
+ * interpreting the returned indices themselves must still keep them aligned.
  *
  * Limits: 1 <= t <= k, C(k,t) <= 65535 (indices are uint16_t),
  *         C(k-1,t-1) <= 65535, and the tables must fit in 16 GB. Each failure

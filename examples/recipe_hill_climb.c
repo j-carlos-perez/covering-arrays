@@ -119,7 +119,11 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Error: failed to create covering array\n");
     return 1;
   }
-  ca_init_random_balanced(ca);
+  if (ca_init_random_balanced(ca) != 0) {
+    fprintf(stderr, "Error: failed to initialize covering array\n");
+    ca_destroy(ca);
+    return 1;
+  }
 
   /* ---------------------------------------------------------------------
    * STEP 2: validate once. This allocates P and tcomb_counter.
@@ -128,6 +132,11 @@ int main(int argc, char *argv[]) {
    * return 0 -- the search would appear to run and do nothing.
    * ------------------------------------------------------------------- */
   ca_validate(ca);
+  if (ca->total == 0) {
+    fprintf(stderr, "Error: failed to initialize coverage state\n");
+    ca_destroy(ca);
+    return 1;
+  }
   size_t R = (size_t)binomial(k, t);
   size_t initial_covered = ca->covered;
 
@@ -141,8 +150,8 @@ int main(int argc, char *argv[]) {
   /* ---------------------------------------------------------------------
    * STEP 3: build the search scaffolding.
    *
-   * Both are CALLER-OWNED and must use the same k and t as the array -- a
-   * mismatch is silent corruption, not an error.
+   * Both are CALLER-OWNED and must use the same k and t as the array. Delta
+   * calls reject a mismatched precompute table with a zero/no-op result.
    * ------------------------------------------------------------------- */
   ca_affected_t *pre = precompute_create((size_t)k, (size_t)t);
   if (pre == NULL) {

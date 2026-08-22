@@ -10,11 +10,14 @@
 #include "../lib/covering_array.h"
 #include "../lib/local_calculation.h"
 #include "../lib/memory.h"
+#include "../lib/pair_diversity.h"
 #include "../lib/parallel_validator.h"
 #include "../lib/precompute.h"
 #include "../lib/set64.h"
 #include "../lib/t_columns_delta.h"
 #include "unity.h"
+#include <limits.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -109,6 +112,30 @@ static void test_ca_create_rejects_t_greater_than_k(void) {
   TEST_ASSERT_NULL(ca_create(8, 3, 1, 2));
 }
 
+static void test_allocation_helpers_reject_size_overflow(void) {
+  TEST_ASSERT_NULL(get_vector(SIZE_MAX / sizeof(int) + 1));
+  TEST_ASSERT_NULL(get_vector_size_t(SIZE_MAX / sizeof(size_t) + 1));
+  TEST_ASSERT_NULL(get_matrix(SIZE_MAX / sizeof(int *) + 1, 1));
+  TEST_ASSERT_NULL(
+      get_matrix_count_calloc(SIZE_MAX / sizeof(ca_count_t *) + 1, 1));
+}
+
+static void test_int_indexed_spaces_reject_overflow(void) {
+  TEST_ASSERT_FALSE(ca_params_valid(1, 2, 50000, 2));
+  TEST_ASSERT_NULL(ca_create(1, 2, 50000, 2));
+
+  int row[2] = {49999, 49999};
+  int cols_data[2] = {0, 1};
+  int *cols[1] = {cols_data};
+  TEST_ASSERT_EQUAL_INT(-1, get_col(row, cols, 0, 2, 50000));
+
+  /* C(35,17) exceeds INT_MAX, the public callback/count index type. */
+  TEST_ASSERT_EQUAL_INT(0, t_wise_visit(35, 17, NULL, NULL));
+  int count = 123;
+  TEST_ASSERT_NULL(generate_t_combinations(35, 17, &count));
+  TEST_ASSERT_EQUAL_INT(0, count);
+}
+
 /* ------------------------------------------- 1.6  inv_ruffini range guard */
 
 static void test_inv_ruffini_rejects_out_of_range(void) {
@@ -186,6 +213,40 @@ static void test_apply_cell_change_keeps_p_in_sync_over_many_moves(void) {
   ca_destroy(ca);
 }
 
+static void test_delta_functions_reject_invalid_arguments_without_mutating(void) {
+  covering_array_t *ca = make_random_ca(8, 6, 3, 2, 31415);
+  ca_validate(ca);
+  ca_affected_t *pre = precompute_create(6, 2);
+  ca_affected_t *wrong_pre = precompute_create(5, 2);
+  size_t R = (size_t)binomial(6, 2);
+  int **IToC = get_matrix(R, 2);
+  t_wise(IToC, 6, 2);
+  int original = ca->matrix[0][0];
+  size_t covered = ca->covered;
+
+  TEST_ASSERT_EQUAL_INT(0,
+                        ca_apply_cell_change(ca, pre, IToC, -1, 0, 1));
+  TEST_ASSERT_EQUAL_INT(0,
+                        ca_apply_cell_change(ca, pre, IToC, 0, 6, 1));
+  TEST_ASSERT_EQUAL_INT(0,
+                        ca_apply_cell_change(ca, pre, IToC, 0, 0, 4));
+  TEST_ASSERT_EQUAL_INT(
+      0, ca_apply_cell_change(ca, wrong_pre, IToC, 0, 0, 1));
+  TEST_ASSERT_EQUAL_INT(original, ca->matrix[0][0]);
+  TEST_ASSERT_EQUAL_size_t(covered, ca->covered);
+
+  int bad_vals[2] = {-1, 0};
+  TEST_ASSERT_EQUAL_INT(
+      0, ca_apply_tcolumns_change(ca, pre, IToC, 0, 0, bad_vals));
+  TEST_ASSERT_EQUAL_INT(original, ca->matrix[0][0]);
+  TEST_ASSERT_EQUAL_size_t(covered, ca->covered);
+
+  precompute_destroy(wrong_pre);
+  precompute_destroy(pre);
+  free_matrix(IToC, R);
+  ca_destroy(ca);
+}
+
 static void test_apply_tcolumns_change_applies_when_delta_is_zero(void) {
   covering_array_t *ca = make_random_ca(10, 6, 2, 2, 555);
   ca_validate(ca);
@@ -219,6 +280,28 @@ static void test_apply_tcolumns_change_applies_when_delta_is_zero(void) {
     }
   }
   TEST_ASSERT_TRUE_MESSAGE(found, "no delta==0 t-column change found");
+
+  free_matrix(IToC, R);
+  precompute_destroy(pre);
+  ca_destroy(ca);
+}
+
+static void test_apply_tcolumns_change_keeps_state_in_sync_over_many_moves(void) {
+  covering_array_t *ca = make_random_ca(10, 7, 3, 3, 2718);
+  ca_validate(ca);
+  ca_affected_t *pre = precompute_create(7, 3);
+  TEST_ASSERT_NOT_NULL(pre);
+  size_t R = (size_t)binomial(7, 3);
+  int **IToC = get_matrix(R, 3);
+  t_wise(IToC, 7, 3);
+
+  srand(1618);
+  for (int move = 0; move < 100; move++) {
+    int values[3] = {rand() % 3, rand() % 3, rand() % 3};
+    ca_apply_tcolumns_change(ca, pre, IToC, rand() % ca->N,
+                             (uint16_t)(rand() % R), values);
+    assert_coverage_matches_reference(ca);
+  }
 
   free_matrix(IToC, R);
   precompute_destroy(pre);
@@ -305,6 +388,27 @@ static void test_pv_validate_agrees_with_ca_validate(void) {
   }
 }
 
+static void test_failed_parallel_validation_invalidates_summary(void) {
+  covering_array_t *ca = make_random_ca(8, 5, 2, 2, 99);
+  pv_validate(ca);
+  TEST_ASSERT_TRUE(ca->total > 0);
+  int **matrix = ca->matrix;
+  ca->matrix = NULL;
+  pv_validate(ca);
+  TEST_ASSERT_EQUAL_size_t(0, ca->covered);
+  TEST_ASSERT_EQUAL_size_t(0, ca->total);
+  ca->matrix = matrix;
+
+  ca_validate(ca);
+  TEST_ASSERT_TRUE(ca->total > 0);
+  ca->matrix = NULL;
+  TEST_ASSERT_EQUAL_INT(0, ca_validate(ca));
+  TEST_ASSERT_EQUAL_size_t(0, ca->covered);
+  TEST_ASSERT_EQUAL_size_t(0, ca->total);
+  ca->matrix = matrix;
+  ca_destroy(ca);
+}
+
 /* ------------------------------------------------------- 2.6  gray codes */
 
 static void test_gray_code_sequences_do_not_leak_state(void) {
@@ -343,6 +447,56 @@ static void test_gray_code_sequences_do_not_leak_state(void) {
     count++;
   } while (next_gray_code(arr3, 3, 2));
   TEST_ASSERT_EQUAL_INT(8, count);
+}
+
+static void test_gray_code_stays_exhausted_until_reinitialized(void) {
+  int arr[2];
+  init_gray_code(arr, 2);
+  while (next_gray_code(arr, 2, 2)) {
+  }
+  TEST_ASSERT_EQUAL_INT(0, next_gray_code(arr, 2, 2));
+  TEST_ASSERT_EQUAL_INT(0, next_gray_code(arr, 2, 2));
+  init_gray_code(arr, 2);
+  TEST_ASSERT_EQUAL_INT(1, next_gray_code(arr, 2, 2));
+}
+
+static void test_pair_diversity_rejects_arithmetic_overflow(void) {
+  int seed[2] = {0, 0};
+  pd_score_t score;
+  TEST_ASSERT_EQUAL_INT(-1, pd_evaluate_seed(seed, 2, 50000, &score));
+
+  int *large_seed = get_vector(20000);
+  TEST_ASSERT_NOT_NULL(large_seed);
+  TEST_ASSERT_EQUAL_INT(
+      -1, pd_generate_balanced_seed(20000, 1, 1, 0, large_seed, NULL));
+  free_vector(large_seed);
+}
+
+static void test_ca_add_row_uses_geometric_growth_and_validates_input(void) {
+  covering_array_t *ca = ca_create(1, 2, 2, 1);
+  TEST_ASSERT_NOT_NULL(ca);
+  int row[2] = {0, 1};
+  for (int i = 0; i < 100; i++) {
+    TEST_ASSERT_EQUAL_INT(0, ca_add_row(ca, row));
+  }
+  TEST_ASSERT_EQUAL_INT(101, ca->N);
+  TEST_ASSERT_EQUAL_INT(128, ca->capacity);
+  TEST_ASSERT_EQUAL_INT(-1, ca_add_row(ca, NULL));
+  int bad_row[2] = {0, 2};
+  TEST_ASSERT_EQUAL_INT(-1, ca_add_row(ca, bad_row));
+  ca_destroy(ca);
+}
+
+static void test_ca_add_row_coverage_refuses_counter_overflow(void) {
+  covering_array_t *ca = ca_create(1, 1, 2, 1);
+  TEST_ASSERT_NOT_NULL(ca);
+  ca->matrix[0][0] = 0;
+  ca_validate(ca);
+  ca->P[0][0] = CA_COUNT_MAX;
+  int row[1] = {0};
+  TEST_ASSERT_EQUAL_INT(-1, ca_add_row_coverage(ca, row));
+  TEST_ASSERT_EQUAL_UINT(CA_COUNT_MAX, ca->P[0][0]);
+  ca_destroy(ca);
 }
 
 /* ------------------------------------------------------ 2.8  shuffle bias */
@@ -462,25 +616,40 @@ static void test_set64_make_key_roundtrips(void) {
   TEST_ASSERT_TRUE(k > SET64_DELETED_KEY);
 }
 
+static void test_set64_rejects_unrepresentable_capacity(void) {
+  TEST_ASSERT_NULL(set64_create(UINT32_MAX));
+  TEST_ASSERT_NULL(set64_create(UINT32_MAX / 2 + 1));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_binomial_rejects_r_greater_than_k);
   RUN_TEST(test_binomial_is_exact_near_the_uint64_ceiling);
   RUN_TEST(test_t_wise_refuses_t_greater_than_k);
   RUN_TEST(test_ca_create_rejects_t_greater_than_k);
+  RUN_TEST(test_allocation_helpers_reject_size_overflow);
+  RUN_TEST(test_int_indexed_spaces_reject_overflow);
   RUN_TEST(test_inv_ruffini_rejects_out_of_range);
   RUN_TEST(test_apply_cell_change_applies_when_delta_is_zero);
   RUN_TEST(test_apply_cell_change_keeps_p_in_sync_over_many_moves);
+  RUN_TEST(test_delta_functions_reject_invalid_arguments_without_mutating);
   RUN_TEST(test_apply_tcolumns_change_applies_when_delta_is_zero);
+  RUN_TEST(test_apply_tcolumns_change_keeps_state_in_sync_over_many_moves);
   RUN_TEST(test_coverage_counters_survive_more_than_255_rows);
   RUN_TEST(test_pv_validate_is_idempotent);
   RUN_TEST(test_pv_validate_agrees_with_ca_validate);
+  RUN_TEST(test_failed_parallel_validation_invalidates_summary);
   RUN_TEST(test_gray_code_sequences_do_not_leak_state);
+  RUN_TEST(test_gray_code_stays_exhausted_until_reinitialized);
+  RUN_TEST(test_pair_diversity_rejects_arithmetic_overflow);
+  RUN_TEST(test_ca_add_row_uses_geometric_growth_and_validates_input);
+  RUN_TEST(test_ca_add_row_coverage_refuses_counter_overflow);
   RUN_TEST(test_shuffle_is_unbiased);
   RUN_TEST(test_set64_grows_dense_array);
   RUN_TEST(test_set64_insert_ignores_duplicates);
   RUN_TEST(test_set64_delete_finds_every_present_key);
   RUN_TEST(test_set64_random_reaches_every_element);
   RUN_TEST(test_set64_make_key_roundtrips);
+  RUN_TEST(test_set64_rejects_unrepresentable_capacity);
   return UNITY_END();
 }

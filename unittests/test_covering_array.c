@@ -91,6 +91,14 @@ void test_incremental_row_coverage_matches_full_validation(void) {
   ca_destroy(full);
 }
 
+void test_io_rejects_null_paths(void) {
+  const int values[] = {0};
+  covering_array_t *ca = create_array(values, 1, 1, 2, 1);
+  TEST_ASSERT_EQUAL_INT(-1, ca_save(NULL, ca, NULL));
+  TEST_ASSERT_NULL(ca_load(NULL));
+  ca_destroy(ca);
+}
+
 int main(void) {
   if (mkdtemp(test_directory) == NULL) {
     return EXIT_FAILURE;
@@ -100,6 +108,7 @@ int main(void) {
   RUN_TEST(test_ca_save_uses_complete_filename_for_covering_array);
   RUN_TEST(test_ca_save_derives_missing_count_for_incomplete_array);
   RUN_TEST(test_incremental_row_coverage_matches_full_validation);
+  RUN_TEST(test_io_rejects_null_paths);
   int result = UNITY_END();
 
   rmdir(test_directory);

@@ -23,7 +23,11 @@
  * double-counted P and reported combinations as uncovered that were not.)
  */
 void pv_validate(covering_array_t *ca) {
-  if (ca == NULL || ca->matrix == NULL)
+  if (ca == NULL)
+    return;
+  ca->covered = 0;
+  ca->total = 0;
+  if (ca->matrix == NULL)
     return;
   if (!ca_params_valid(ca->N, ca->k, ca->v, ca->t))
     return;

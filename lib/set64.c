@@ -54,6 +54,9 @@ static inline uint32_t next_pow2_u32(uint32_t x) {
  * Caller must free with set64_free().
  */
 Set64 *set64_create(uint32_t initial_capacity) {
+  if (initial_capacity > UINT32_MAX / 2) {
+    return NULL;
+  }
   Set64 *s = (Set64 *)malloc(sizeof(Set64));
   if (!s)
     return NULL;
@@ -67,8 +70,14 @@ Set64 *set64_create(uint32_t initial_capacity) {
   s->mask = s->tcap - 1;
   s->size = 0;
 
-  s->dense = (uint64_t *)malloc(sizeof(uint64_t) * s->cap);
-  s->table = (Set64Entry *)malloc(sizeof(Set64Entry) * s->tcap);
+  if ((size_t)s->cap > SIZE_MAX / sizeof(uint64_t) ||
+      (size_t)s->tcap > SIZE_MAX / sizeof(Set64Entry)) {
+    free(s);
+    return NULL;
+  }
+  s->dense = (uint64_t *)malloc(sizeof(uint64_t) * (size_t)s->cap);
+  s->table =
+      (Set64Entry *)calloc((size_t)s->tcap, sizeof(Set64Entry));
 
   if (!s->dense || !s->table) {
     free(s->dense);
@@ -77,11 +86,8 @@ Set64 *set64_create(uint32_t initial_capacity) {
     return NULL;
   }
 
-  for (uint32_t i = 0; i < s->tcap; i++) {
-    s->table[i].key = SET64_EMPTY_KEY;
-  }
-
-  s->max_fill = (s->tcap * SET64_LOAD_FACTOR_NUM) / SET64_LOAD_FACTOR_DEN;
+  s->max_fill = (uint32_t)(((uint64_t)s->tcap * SET64_LOAD_FACTOR_NUM) /
+                           SET64_LOAD_FACTOR_DEN);
   return s;
 }
 
@@ -105,37 +111,39 @@ void set64_free(Set64 *s) {
 static int set64_rehash(Set64 *s) {
   uint32_t old_tcap = s->tcap;
   Set64Entry *old_tab = s->table;
+  uint64_t *old_dense = s->dense;
 
-  uint32_t new_tcap = s->tcap << 1;
-  if (new_tcap < s->tcap) {
+  if (s->tcap > UINT32_MAX / 2) {
     return 0; /* capacity overflow */
   }
+  uint32_t new_tcap = s->tcap * 2;
 
-  /* dense[] must grow with the table. It holds one slot per live element and
-     is indexed by s->size, but growth used to be gated on max_fill (0.7 *
-     tcap == 1.4 * cap), so insert number cap+1 wrote past its end. */
+  /* Allocate both replacements before committing either one. This keeps the
+     public capacity fields and all existing keys unchanged on failure. */
   uint32_t new_cap = new_tcap / 2;
-  uint64_t *new_dense =
-      (uint64_t *)realloc(s->dense, sizeof(uint64_t) * new_cap);
-  if (new_dense == NULL) {
+  if ((size_t)new_cap > SIZE_MAX / sizeof(uint64_t) ||
+      (size_t)new_tcap > SIZE_MAX / sizeof(Set64Entry)) {
     return 0;
   }
+  uint64_t *new_dense =
+      (uint64_t *)malloc(sizeof(uint64_t) * (size_t)new_cap);
+  Set64Entry *new_tab =
+      (Set64Entry *)calloc((size_t)new_tcap, sizeof(Set64Entry));
+  if (new_dense == NULL || new_tab == NULL) {
+    free(new_dense);
+    free(new_tab);
+    return 0;
+  }
+  memcpy(new_dense, old_dense, sizeof(uint64_t) * (size_t)s->size);
+
   s->dense = new_dense;
   s->cap = new_cap;
-
-  Set64Entry *new_tab = (Set64Entry *)malloc(sizeof(Set64Entry) * new_tcap);
-  if (new_tab == NULL) {
-    return 0;
-  }
-
   s->tcap = new_tcap;
   s->mask = s->tcap - 1;
   s->table = new_tab;
 
-  for (uint32_t i = 0; i < s->tcap; i++)
-    s->table[i].key = SET64_EMPTY_KEY;
-
-  s->max_fill = (s->tcap * SET64_LOAD_FACTOR_NUM) / SET64_LOAD_FACTOR_DEN;
+  s->max_fill = (uint32_t)(((uint64_t)s->tcap * SET64_LOAD_FACTOR_NUM) /
+                           SET64_LOAD_FACTOR_DEN);
 
   for (uint32_t i = 0; i < old_tcap; i++) {
     uint64_t key = old_tab[i].key;
@@ -173,6 +181,7 @@ static int set64_rehash(Set64 *s) {
     }
   }
 
+  free(old_dense);
   free(old_tab);
   return 1;
 }

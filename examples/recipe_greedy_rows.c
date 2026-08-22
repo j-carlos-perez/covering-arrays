@@ -118,7 +118,11 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Error: failed to create covering array\n");
     return 1;
   }
-  ca_init_random(ca);
+  if (ca_init_random(ca) != 0) {
+    fprintf(stderr, "Error: failed to initialize covering array\n");
+    ca_destroy(ca);
+    return 1;
+  }
 
   /* ---------------------------------------------------------------------
    * STEP 2: validate, which ALLOCATES ca->P and ca->tcomb_counter.
@@ -126,6 +130,11 @@ int main(int argc, char *argv[]) {
    * Everything below reads those, so this step is mandatory, not optional.
    * ------------------------------------------------------------------- */
   ca_validate(ca);
+  if (ca->total == 0) {
+    fprintf(stderr, "Error: failed to initialize coverage state\n");
+    ca_destroy(ca);
+    return 1;
+  }
 
   size_t R = (size_t)binomial(k, t);
   printf("=== Greedy row construction ===\n");
@@ -194,7 +203,10 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Error: failed to append row\n");
       break;
     }
-    ca_add_row_coverage(ca, best_row);
+    if (ca_add_row_coverage(ca, best_row) != 0) {
+      fprintf(stderr, "Error: failed to update row coverage\n");
+      break;
+    }
 
     if (ca->N <= 10 || ca->N % 5 == 0 || ca->covered == ca->total) {
       printf("  row %-3d covers %-4zu new -> %zu/%zu (%.1f%%)\n", ca->N,

@@ -1,5 +1,6 @@
 #include "combinatorial.h"
 #include "memory.h"
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -125,6 +126,10 @@ int t_wise(int **GTP, int k, int t) {
   if (GTP == NULL || t < 1 || k < t) {
     return -1;
   }
+  uint64_t count = binomial(k, t);
+  if (!binomial_is_usable(count) || count > INT_MAX) {
+    return -1;
+  }
 
   int J[t];
   long long i, iMax, actual = 0;
@@ -168,6 +173,10 @@ int t_wise(int **GTP, int k, int t) {
  */
 int t_wise_visit(int k, int t, t_combination_callback cb, void *user_data) {
   if (t < 1 || k < t) {
+    return 0;
+  }
+  uint64_t count = binomial(k, t);
+  if (!binomial_is_usable(count) || count > INT_MAX) {
     return 0;
   }
 
@@ -239,18 +248,28 @@ int inv_ruffini(int *V, int num, int v, int t) {
  *
  * Reads t symbols from line at positions specified by IToC row j.
  * Encodes as mixed-radix number: s[0]*v^(t-1) + ... + s[t-1].
- * Returns -1 if any symbol equals v (wildcard found).
+ * Returns -1 for a wildcard, invalid symbol/argument, or int overflow.
  */
 int get_col(const int *line, int **IToC, int j, int t, int v) {
-  int i, res = line[IToC[j][0]];
-  if (res == v) {
+  if (line == NULL || IToC == NULL || j < 0 || t < 1 || v < 2 ||
+      IToC[j] == NULL) {
     return -1;
   }
-  for (i = 1; i < t; ++i) {
-    if (line[IToC[j][i]] == v) {
+
+  int res = line[IToC[j][0]];
+  if (res < 0 || res >= v) {
+    return -1;
+  }
+  for (int i = 1; i < t; ++i) {
+    int symbol = line[IToC[j][i]];
+    if (symbol < 0 || symbol >= v) {
       return -1;
     }
-    res = res * v + line[IToC[j][i]];
+    int64_t next = (int64_t)res * v + symbol;
+    if (next > INT_MAX) {
+      return -1;
+    }
+    res = (int)next;
   }
   return res;
 }
@@ -263,7 +282,7 @@ int get_col(const int *line, int **IToC, int j, int t, int v) {
  */
 int **generate_t_combinations(int k, int t, int *out_n) {
   uint64_t n = binomial(k, t);
-  if (!binomial_is_usable(n) || n == 0) {
+  if (!binomial_is_usable(n) || n == 0 || n > INT_MAX) {
     if (out_n != NULL) {
       *out_n = 0;
     }
@@ -309,6 +328,9 @@ static int compare_int(const void *a, const void *b) {
  * Initializes an array as a sorted permutation [0, 1, ..., n-1].
  */
 void init_permutation(int *arr, int n) {
+  if (arr == NULL || n <= 0) {
+    return;
+  }
   qsort(arr, n, sizeof(int), compare_int);
 }
 
@@ -318,7 +340,7 @@ void init_permutation(int *arr, int n) {
  * Returns 1 if more permutations exist, 0 if exhausted.
  */
 int next_permutation(int *arr, int n) {
-  if (n <= 1) {
+  if (arr == NULL || n <= 1) {
     return 0;
   }
 
@@ -362,8 +384,14 @@ int next_permutation(int *arr, int n) {
 static int *gray_dir = NULL;
 static int gray_capacity = 0;
 static int gray_length = 0;
+static int gray_exhausted = 1;
 
 static void gray_reset(int n) {
+  if (n <= 0) {
+    gray_length = 0;
+    gray_exhausted = 1;
+    return;
+  }
   if (n > gray_capacity) {
     free(gray_dir);
     gray_dir = (int *)malloc((size_t)n * sizeof(int));
@@ -371,18 +399,25 @@ static void gray_reset(int n) {
   }
   if (gray_dir == NULL) {
     gray_length = 0;
+    gray_exhausted = 1;
     return;
   }
   for (int i = 0; i < n; i++) {
     gray_dir[i] = +1;
   }
   gray_length = n;
+  gray_exhausted = 0;
 }
 
 /*
  * Initializes a Gray code sequence to all zeros and resets the walk state.
  */
 void init_gray_code(int *arr, int n) {
+  if (arr == NULL || n <= 0) {
+    gray_length = 0;
+    gray_exhausted = 1;
+    return;
+  }
   for (int i = 0; i < n; i++) {
     arr[i] = 0;
   }
@@ -398,17 +433,12 @@ void init_gray_code(int *arr, int n) {
  * Not thread-safe: see gray_dir above.
  */
 int next_gray_code(int *arr, int n, int v) {
-  if (arr == NULL || n <= 0 || v < 2) {
+  if (arr == NULL || n <= 0 || v < 2 || gray_exhausted) {
     return 0;
   }
 
-  /* A different length always means a different sequence. Re-initialising here
-     is a safety net; callers are expected to call init_gray_code() first. */
   if (gray_dir == NULL || gray_length != n) {
-    gray_reset(n);
-    if (gray_dir == NULL) {
-      return 0;
-    }
+    return 0; /* every sequence must begin with init_gray_code() */
   }
 
   // Find the RIGHTMOST mobile element
@@ -426,7 +456,7 @@ int next_gray_code(int *arr, int n, int v) {
 
   // If no mobile element found, we've generated all codes
   if (mobile_pos == -1) {
-    gray_length = 0; /* sequence finished; next init_gray_code starts fresh */
+    gray_exhausted = 1;
     return 0;
   }
 

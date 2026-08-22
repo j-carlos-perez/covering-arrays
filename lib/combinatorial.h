@@ -69,9 +69,8 @@ int binomial_is_usable(uint64_t n);
  * Preconditions: GTP must have at least C(k,t) rows of t ints -- allocate with
  *                get_matrix(binomial(k,t), t), or use
  *                generate_t_combinations() to do both together.
- * Returns:       0 on success, -1 if GTP is NULL, t < 1, or k < t. (The last
- *                case matters: C(k,t) is 0 there, so a table sized from it has
- *                no rows at all.)
+ * Returns:       0 on success, -1 if GTP is NULL, t < 1, k < t, or C(k,t)
+ *                exceeds INT_MAX (column-set indices are ints).
  */
 int t_wise(int **GTP, int k, int t);
 
@@ -97,9 +96,11 @@ int inv_ruffini(int *V, int num, int v, int t);
  * The result is the c that indexes ca->P[j].
  *
  * The symbol value v (one past the alphabet) is a wildcard meaning "not yet
- * assigned"; a tuple containing one has no encoding.
+ * assigned"; a tuple containing one has no encoding. All column indices must
+ * be valid for line, and a fully assigned tuple must fit in an int.
  *
- * Returns: the tuple index in [0, v^t), or -1 if any of the t symbols equals v.
+ * Returns: the tuple index in [0, v^t), or -1 for a wildcard, an invalid
+ *          symbol/argument, or an encoding larger than INT_MAX.
  * Cost:    t array reads and t-1 multiply-adds. This is the innermost
  *          operation of every validate and every delta.
  */
@@ -111,9 +112,9 @@ int get_col(const int *line, int **IToC, int j, int t, int v);
  * Convenience wrapper for the common allocate-then-enumerate pair.
  *
  * Ownership: caller must release with free_matrix(result, *out_n).
- * Returns:   the table, or NULL if k, t are out of range or C(k,t) is not
- *            allocatable. out_n receives the row count, or 0 on failure; it
- *            may be NULL if you do not need it.
+ * Returns:   the table, or NULL if k, t are out of range, C(k,t) exceeds
+ *            INT_MAX, or the table cannot be allocated. out_n receives the
+ *            row count, or 0 on failure; it may be NULL.
  */
 int **generate_t_combinations(int k, int t, int *out_n);
 
@@ -131,8 +132,8 @@ typedef void (*t_combination_callback)(int *combination, int index, int k,
  *
  * Same enumeration order as t_wise().
  *
- * Returns: the number of combinations visited, or 0 if t < 1 or k < t. cb may
- *          be NULL, which just counts.
+ * Returns: the number of combinations visited, or 0 if t < 1, k < t, or the
+ *          count exceeds INT_MAX. cb may be NULL, which just counts.
  */
 int t_wise_visit(int k, int t, t_combination_callback cb, void *user_data);
 
@@ -140,7 +141,7 @@ int t_wise_visit(int k, int t, t_combination_callback cb, void *user_data);
  * ---- Permutation iterator ------------------------------------------------
  *
  * Sorts arr ascending, which is the first permutation in lexicographic order.
- * Works on any values, including duplicates.
+ * Works on any values, including duplicates. No-op for NULL or n <= 0.
  */
 void init_permutation(int *arr, int n);
 
@@ -166,7 +167,8 @@ int next_permutation(int *arr, int n);
  * previous one part-way.
  *
  * Thread safety: NOT reentrant, and only one walk can be in flight per process
- *                -- the direction state is a file-scope static.
+ *                -- the direction state is a file-scope static. NULL or a
+ *                non-positive length leaves the iterator exhausted.
  */
 void init_gray_code(int *arr, int n);
 
@@ -174,7 +176,8 @@ void init_gray_code(int *arr, int n);
  * Advances arr to the next Gray code in place.
  *
  * Returns: 1 if arr now holds the next code, 0 when the sequence is exhausted
- *          (after v^n codes) or the arguments are out of range.
+ *          (after v^n codes) or the arguments are out of range. Once exhausted,
+ *          it keeps returning 0 until init_gray_code() starts a new sequence.
  */
 int next_gray_code(int *arr, int n, int v);
 

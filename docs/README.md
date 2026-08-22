@@ -25,7 +25,8 @@ bookkeeping that answers "what is still missing?":
 | `tcomb_counter[j]` | how many of the `v^t` tuples of column-set `j` are still uncovered |
 | `covered` / `total` | `(j,c)` pairs with `P[j][c] > 0`, out of `C(k,t) * v^t` |
 
-The array is a valid covering array exactly when `covered == total`.
+After successful validation (`total > 0`), the array is a valid covering array
+exactly when `covered == total`.
 
 `P` stores **counts, not flags**. That is what makes incremental search
 possible: when a move stops a row from covering a tuple, the count drops by one
@@ -103,13 +104,14 @@ Each step exists for a reason; skipping one is usually silent rather than loud.
 
 3. **Validate** — `ca_validate(ca)` or `pv_validate(ca)`.
    **Required.** This allocates `P` and `tcomb_counter` and fills them. The
-   delta layer checks for `P` and silently returns `0` when it is missing, so
-   skipping this produces a search that appears to run and achieves nothing.
+   delta layer checks for valid coverage state and returns `0` when it is
+   missing, so skipping this produces a search that appears to run and achieves
+   nothing.
    Re-validate after any direct write to `ca->matrix`.
 
 4. **Build the search tables** — only if you are using the delta layer:
    - `precompute_create(k, t)` — **must** use the same `k` and `t` as the array.
-     Nothing checks this later; a mismatch is silent corruption.
+     Delta calls reject mismatched tables with a `0` no-op result.
    - your own `IToC`: `get_matrix(binomial(k,t), t)` then `t_wise(IToC, k, t)`,
      or `generate_t_combinations(k, t, &n)` which does both.
 
@@ -145,7 +147,7 @@ Pointers returned by `precompute_get_affected()` and
 
 ## 5. Invariants you can build on
 
-**After any `ca_apply_cell_change()` or `ca_apply_tcolumns_change()`, the
+**After any valid `ca_apply_cell_change()` or `ca_apply_tcolumns_change()`, the
 coverage state is exactly what a fresh `ca_validate()` on the same matrix would
 produce** — `P`, `covered` and `tcomb_counter` all agree. Enforced by
 `test_apply_cell_change_keeps_p_in_sync_over_many_moves` in
@@ -174,6 +176,8 @@ other.** Calling either twice gives the same answer as calling it once
 | Rows | `N <= 65535` (`CA_COUNT_MAX`) | `ca_params_valid()`, `ca_add_row()` |
 | Alphabet | `v >= 2` | `ca_params_valid()` |
 | Strength | `1 <= t <= k` | `ca_params_valid()`, `t_wise()` |
+| Tuple indices | `v^t <= INT_MAX` | `ca_params_valid()`, checked by `get_col()` |
+| Materialised/visited column-sets | `C(k,t) <= INT_MAX` | `ca_params_valid()`, `t_wise*()` |
 | Column-sets, for `precompute` | `C(k,t) <= 65535` | `precompute_create()` — indices are `uint16_t` |
 | Precompute tables | 16 GB | `precompute_create()` |
 | `binomial()` | signals `BINOMIAL_OVERFLOW` | screen with `binomial_is_usable()` |
@@ -194,16 +198,16 @@ They are **not uniform**. Check this table rather than guessing.
 | `0` success / `-1` failure | `ca_save`, `ca_add_row`, `ca_add_row_coverage`, `ca_init_*`, `t_wise`, `inv_ruffini`, `pd_evaluate_seed`, `pd_generate_balanced_seed` |
 | `1` good / `0` bad — **inverted** | `ca_validate` (1 = fully covering), `ca_params_valid` (1 = usable), `binomial_is_usable` |
 | `1` more / `0` exhausted | `next_permutation`, `next_gray_code` |
-| Value with `-1` sentinel | `get_col` (`-1` = wildcard present) |
+| Value with `-1` sentinel | `get_col` (`-1` = wildcard, invalid input, or unrepresentable tuple) |
 | Value with a sentinel constant | `binomial` (`0` out of range, `BINOMIAL_OVERFLOW` too large) |
 | Count, `0` if invalid | `t_wise_visit` |
 | Signed delta, `0` = no net change | `ca_compute_*_delta`, `ca_apply_*_change` |
 | `bool` | `set64_delete` |
-| `void`, **silent no-op on bad input** | `pv_validate`, `set64_insert` |
+| `void` | `pv_validate` (clears `total` on failure), `set64_insert` (silent no-op on bad input/allocation failure) |
 
-The last row is the trap. `pv_validate()` reports nothing at all — read
-`ca->total` afterwards to see whether it ran, and compare `covered` to `total`
-yourself for the verdict `ca_validate()` hands back directly.
+The last row is the trap. `pv_validate()` reports nothing directly — it clears
+`total` before starting, so `total == 0` means validation failed. Otherwise,
+compare `covered` to `total` for the verdict `ca_validate()` returns directly.
 
 ---
 

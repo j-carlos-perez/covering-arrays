@@ -97,8 +97,8 @@ static inline uint32_t set64_key_get_b(uint64_t k) {
  * the expected peak avoids rehashing.
  *
  * Ownership: caller must release with set64_free().
- * Returns:   the set, or NULL if allocation fails or initial_capacity is too
- *            large to double.
+ * Returns:   the set, or NULL if allocation fails or initial_capacity cannot
+ *            be safely rounded to a power of two and doubled.
  */
 Set64 *set64_create(uint32_t initial_capacity);
 
@@ -114,9 +114,8 @@ void set64_free(Set64 *s);
  * Keys 0 and 1 are reserved sentinels and are rejected; build keys with
  * set64_make_key(), which offsets past them.
  *
- * Silently does nothing if the set needs to grow and the allocation fails --
- * leaving the set intact rather than overrunning it. Check `size` if you must
- * distinguish that case.
+ * Silently does nothing if the set needs to grow and allocation fails. Growth
+ * is atomic, so the existing set and all its capacity fields remain intact.
  *
  * Cost: O(1) expected, amortised over the occasional rehash.
  */

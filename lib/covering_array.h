@@ -59,7 +59,8 @@ typedef struct covering_array {
  *
  * Checks N >= 1, k >= 1, v >= 2, 1 <= t <= k, N <= CA_COUNT_MAX (a coverage
  * counter must be able to hold the row count), and that C(k,t), v^t and their
- * product are all representable and allocatable.
+ * product are representable and allocatable. Because column-set and tuple
+ * indices are ints, both C(k,t) and v^t must be <= INT_MAX.
  *
  * Call this before ca_create() when the parameters come from user input, so
  * you can report the specific problem; ca_create() applies the same test but
@@ -103,8 +104,9 @@ void ca_destroy(covering_array_t *ca);
  * to exist and silently do nothing when it is NULL.
  *
  * Returns: 1 if the array is fully covering (covered == total), 0 otherwise
- *          OR on failure. Both "not covering" and "bad parameters" return 0,
- *          so check ca->total != 0 if you need to tell them apart.
+ *          OR on failure. covered and total are cleared before work begins, so
+ *          total == 0 distinguishes failure from a successfully checked,
+ *          incomplete array.
  * Cost:    N * C(k,t) get_col() evaluations, plus one C(k,t) x t allocation
  *          for its internal column-set table.
  */
@@ -141,8 +143,9 @@ covering_array_t *ca_load(const char *filename);
  *
  * comment is written as a leading "C " line; pass NULL or "" for a default.
  *
- * Returns: 0 on success, -1 if the array is NULL, folder_path is not an
- *          existing directory, or the file cannot be created.
+ * Returns: 0 on success, -1 if an argument is invalid, folder_path is not an
+ *          existing directory, the generated path is too long, or any create,
+ *          write, flush, or close operation fails.
  */
 int ca_save(const char *folder_path, covering_array_t *ca, const char *comment);
 
@@ -158,11 +161,11 @@ void ca_print(covering_array_t *ca);
  * afterwards. Splitting the two lets you evaluate a candidate row's coverage
  * before committing to storing it.
  *
- * row must hold k symbols in [0, v-1].
+ * row must hold k symbols in [0, v-1]; the function validates them.
  *
- * Returns: 0 on success, -1 if ca is NULL, N has reached CA_COUNT_MAX, or
- *          allocation fails (in which case the array is left untouched).
- * Cost:    amortised O(k); the row array grows in blocks.
+ * Returns: 0 on success, -1 if an argument or symbol is invalid, N has reached
+ *          CA_COUNT_MAX, or allocation fails (the array is left untouched).
+ * Cost:    amortised O(k); pointer capacity grows geometrically.
  */
 int ca_add_row(covering_array_t *ca, const int *row);
 
@@ -173,9 +176,11 @@ int ca_add_row(covering_array_t *ca, const int *row);
  * never reads or writes ca->matrix or ca->N. Call it with the same row you
  * passed to ca_add_row() to keep the two in step.
  *
- * Preconditions: P and tcomb_counter must exist -- validate first.
+ * Preconditions: valid P/tcomb_counter/total state must exist -- validate
+ *                first. Symbols may be in [0,v], where v is the wildcard.
  * Returns:       0 on success, -1 if ca or row is NULL, the coverage state has
- *                not been allocated, or the parameters are unusable.
+ *                not been allocated, parameters/symbols are unusable, an
+ *                allocation fails, or a coverage counter would overflow.
  * Cost:          C(k,t) get_col() evaluations, plus one C(k,t) x t allocation
  *                for its internal column-set table -- so prefer re-validating
  *                once over calling this in a tight loop over many rows.
@@ -195,7 +200,8 @@ int ca_add_row_coverage(covering_array_t *ca, const int *row);
  * The rotation initialisers build every row from row 0 and REQUIRE N == k;
  * they fail with a message on stderr otherwise. "position" rotates row 0 right
  * by the row index; "full" also adds the row index to each symbol modulo v,
- * giving a Latin-square pattern. Per sweep_summary.md these do well for v=2
+ * giving a cyclic position-and-symbol pattern (not generally a Latin square).
+ * Per sweep_summary.md these do well for v=2
  * and poorly for v >= 3, where random initialisation is the better default.
  *
  * All of these draw from the global rand() sequence; call srand() first.

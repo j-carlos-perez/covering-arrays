@@ -32,9 +32,12 @@
  *                write to ca->matrix. IToC must be a C(k,t) x t table filled by
  *                t_wise(IToC, ca->k, ca->t), and pre must come from
  *                precompute_create(ca->k, ca->t) -- the same k and t as ca.
+ *                row_idx must be in [0,N), col_idx in [0,k), and new_val in
+ *                [0,v], where v is the wildcard marker.
  * Ownership:     borrows everything; frees nothing; leaves ca unchanged.
  * Returns:       the coverage delta, or 0 if any argument is NULL, ca->P is
- *                NULL, or new_val equals the current value.
+ *                NULL, coverage state is invalid, indices/value/table
+ *                dimensions are invalid, or new_val equals the current value.
  * Cost:          2 * C(k-1, t-1) get_col() evaluations. No allocation.
  */
 ssize_t ca_compute_cell_delta(covering_array_t *ca, const ca_affected_t *pre,

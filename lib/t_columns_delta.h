@@ -35,12 +35,13 @@
  *                t_wise(IToC, ca->k, ca->t); pre must come from
  *                precompute_create(ca->k, ca->t). new_vals must hold t symbols
  *                in [0, v-1], ordered to match IToC[change_set_idx].
- *                Strength t must be <= 16.
+ *                row_idx must be in [0,N), change_set_idx must be valid, and
+ *                strength t must be <= 16.
  * Ownership:     borrows everything; frees nothing; restores ca->matrix before
  *                returning, so the array is unchanged on exit.
  * Returns:       the coverage delta, or 0 if any argument is NULL, ca->P is
- *                NULL, change_set_idx is out of range, t is out of range, or
- *                new_vals matches the current values.
+ *                NULL, coverage state/indices/values/table dimensions are
+ *                invalid, or new_vals matches the current values.
  * Cost:          2 * (C(k,t) - C(k-t,t)) get_col() evaluations. No allocation.
  */
 ssize_t ca_compute_tcolumns_delta(covering_array_t *ca,

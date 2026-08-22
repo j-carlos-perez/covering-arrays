@@ -7,6 +7,30 @@
    values fit comfortably on the stack and need no allocation per call. */
 #define TCOL_MAX_T 16
 
+static int tcolumns_args_valid(const covering_array_t *ca,
+                               const ca_affected_t *pre, int **IToC,
+                               int row_idx, uint16_t change_set_idx,
+                               const int *new_vals, int needs_counter) {
+  if (ca == NULL || pre == NULL || IToC == NULL || new_vals == NULL ||
+      ca->matrix == NULL || ca->P == NULL || ca->total == 0 ||
+      (needs_counter && ca->tcomb_counter == NULL) || row_idx < 0 ||
+      row_idx >= ca->N || pre->k != (size_t)ca->k ||
+      pre->t != (size_t)ca->t || change_set_idx >= pre->change_sets ||
+      pre->t < 1 || pre->t > TCOL_MAX_T || IToC[change_set_idx] == NULL) {
+    return 0;
+  }
+  for (size_t j = 0; j < pre->t; j++) {
+    if (new_vals[j] < 0 || new_vals[j] >= ca->v) {
+      return 0;
+    }
+    int column = IToC[change_set_idx][j];
+    if (column < 0 || column >= ca->k) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 /*
  * Computes the coverage delta when changing t columns in a row.
  *
@@ -21,19 +45,12 @@ ssize_t ca_compute_tcolumns_delta(covering_array_t *ca,
                                   const ca_affected_t *pre, int **IToC,
                                   int row_idx, uint16_t change_set_idx,
                                   const int *new_vals) {
-  if (ca == NULL || pre == NULL || IToC == NULL || new_vals == NULL ||
-      ca->P == NULL) {
-    return 0;
-  }
-
-  if (change_set_idx >= pre->change_sets) {
+  if (!tcolumns_args_valid(ca, pre, IToC, row_idx, change_set_idx, new_vals,
+                           0)) {
     return 0;
   }
 
   int t = (int)pre->t;
-  if (t < 1 || t > TCOL_MAX_T) {
-    return 0;
-  }
 
   const uint16_t *affected = precompute_get_affected(pre, change_set_idx);
   size_t affected_count = precompute_get_affected_count(pre);
@@ -113,19 +130,12 @@ ssize_t ca_compute_tcolumns_delta(covering_array_t *ca,
 ssize_t ca_apply_tcolumns_change(covering_array_t *ca, const ca_affected_t *pre,
                                  int **IToC, int row_idx,
                                  uint16_t change_set_idx, const int *new_vals) {
-  if (ca == NULL || pre == NULL || IToC == NULL || new_vals == NULL ||
-      ca->P == NULL || ca->tcomb_counter == NULL) {
-    return 0;
-  }
-
-  if (change_set_idx >= pre->change_sets) {
+  if (!tcolumns_args_valid(ca, pre, IToC, row_idx, change_set_idx, new_vals,
+                           1)) {
     return 0;
   }
 
   int t = (int)pre->t;
-  if (t < 1 || t > TCOL_MAX_T) {
-    return 0;
-  }
 
   const uint16_t *affected = precompute_get_affected(pre, change_set_idx);
   size_t affected_count = precompute_get_affected_count(pre);

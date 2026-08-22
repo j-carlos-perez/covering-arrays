@@ -16,11 +16,10 @@
  * reset only tcomb_counter, so a second call double-counted P and reported
  * combinations as missing that were already covered.)
  *
- * Unlike ca_validate() this returns void and reports nothing. It quietly does
- * nothing when ca is NULL, ca->matrix is NULL, the parameters fail
- * ca_params_valid(), or allocation fails -- so read ca->covered and ca->total
- * afterwards to see whether anything happened, and compare them yourself for
- * the pass/fail verdict that ca_validate() returns directly:
+ * Unlike ca_validate() this returns void. For a non-NULL ca it clears covered
+ * and total before doing any work, including when the matrix/parameters are
+ * invalid or allocation fails. Read total afterwards to tell whether validation
+ * completed, and compare covered with total for the verdict:
  *
  *     pv_validate(ca);
  *     int fully_covering = (ca->total > 0 && ca->covered == ca->total);

@@ -1,14 +1,40 @@
 #include "pair_diversity.h"
 #include "combinatorial.h"
+#include "memory.h"
+#include <limits.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+static int pd_dimensions_valid(int k, int v) {
+  if (k < 2 || v < 1) {
+    return 0;
+  }
+  uint64_t pair_space = (uint64_t)(unsigned int)v * (unsigned int)v;
+  if (pair_space > INT_MAX) {
+    return 0;
+  }
+  uint64_t per_lag = (uint64_t)k < pair_space ? (uint64_t)k : pair_space;
+  if ((uint64_t)(k - 1) > (uint64_t)INT_MAX / per_lag) {
+    return 0; /* sum_unique_pairs is an int */
+  }
+  size_t k_size = (size_t)k;
+  if (k_size > SIZE_MAX / k_size) {
+    return 0;
+  }
+  size_t squared = k_size * k_size;
+  if ((size_t)(k - 1) > SIZE_MAX / squared) {
+    return 0; /* collision_penalty must be representable */
+  }
+  return 1;
+}
 
 /*
  * Compares two pair diversity scores.
  * 
  * Primary: higher min_unique_pairs (worst lag has most unique pairs).
  * Secondary: higher sum_unique_pairs (total unique pairs across lags).
- * Tertiary: lower collision_penalty (fewer hash collisions).
+ * Tertiary: lower collision_penalty (more even pair frequencies).
  */
 static int pd_score_is_better(const pd_score_t *a, const pd_score_t *b) {
   if (a->min_unique_pairs != b->min_unique_pairs) {
@@ -30,8 +56,8 @@ static int pd_score_is_better(const pd_score_t *a, const pd_score_t *b) {
  * Returns 0 on success, -1 on failure.
  */
 static int pd_fill_balanced_random_row(int *row, int k, int v) {
-  int *remaining = malloc((size_t)v * sizeof(int));
-  int *symbols = malloc((size_t)v * sizeof(int));
+  int *remaining = get_vector((size_t)v);
+  int *symbols = get_vector((size_t)v);
   if (remaining == NULL || symbols == NULL) {
     free(remaining);
     free(symbols);
@@ -96,12 +122,12 @@ static int pd_fill_balanced_random_row(int *row, int k, int v) {
  * - collision_penalty: sum of squares of pair frequencies.
  */
 int pd_evaluate_seed(const int *seed, int k, int v, pd_score_t *out_score) {
-  if (seed == NULL || out_score == NULL || k < 2 || v < 1) {
+  if (seed == NULL || out_score == NULL || !pd_dimensions_valid(k, v)) {
     return -1;
   }
 
   int pair_space = v * v;
-  int *freq = malloc((size_t)pair_space * sizeof(int));
+  int *freq = get_vector((size_t)pair_space);
   if (freq == NULL) {
     return -1;
   }
@@ -157,7 +183,7 @@ int pd_evaluate_seed(const int *seed, int k, int v, pd_score_t *out_score) {
  */
 int pd_generate_balanced_seed(int k, int v, int restarts, int iterations,
                               int *out_seed, pd_score_t *out_score) {
-  if (out_seed == NULL || k < 2 || v < 1) {
+  if (out_seed == NULL || !pd_dimensions_valid(k, v)) {
     return -1;
   }
 
@@ -165,14 +191,15 @@ int pd_generate_balanced_seed(int k, int v, int restarts, int iterations,
     restarts = 64;
   }
   if (iterations <= 0) {
-    iterations = k * k * 20;
-    if (iterations < 400) {
-      iterations = 400;
+    int64_t default_iterations = (int64_t)k * k * 20;
+    if (default_iterations > INT_MAX) {
+      return -1;
     }
+    iterations = default_iterations < 400 ? 400 : (int)default_iterations;
   }
 
-  int *candidate = malloc((size_t)k * sizeof(int));
-  int *best = malloc((size_t)k * sizeof(int));
+  int *candidate = get_vector((size_t)k);
+  int *best = get_vector((size_t)k);
   if (candidate == NULL || best == NULL) {
     free(candidate);
     free(best);

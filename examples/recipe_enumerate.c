@@ -13,6 +13,7 @@
 
 #include "lib/combinatorial.h"
 #include "lib/memory.h"
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -56,7 +57,7 @@ int main(int argc, char *argv[]) {
    * allocation size has to be screened before it is trusted.
    * ------------------------------------------------------------------- */
   uint64_t R64 = binomial(k, t);
-  if (!binomial_is_usable(R64)) {
+  if (!binomial_is_usable(R64) || R64 > INT_MAX) {
     fprintf(stderr, "Error: C(%d,%d) is too large to work with\n", k, t);
     return 1;
   }
@@ -64,6 +65,10 @@ int main(int argc, char *argv[]) {
 
   size_t C = 1;
   for (int i = 0; i < t; i++) {
+    if (C > (size_t)INT_MAX / (size_t)v) {
+      fprintf(stderr, "Error: v^t exceeds the int tuple-index limit\n");
+      return 1;
+    }
     C *= (size_t)v;
   }
 
@@ -189,6 +194,10 @@ int main(int argc, char *argv[]) {
   {
     int n = k < 4 ? k : 4;
     int *perm = get_vector((size_t)n);
+    if (perm == NULL) {
+      fprintf(stderr, "Error: out of memory\n");
+      return 1;
+    }
     for (int i = 0; i < n; i++) {
       perm[i] = i;
     }
@@ -217,6 +226,10 @@ int main(int argc, char *argv[]) {
   {
     int n = k < 3 ? k : 3;
     int *gray = get_vector((size_t)n);
+    if (gray == NULL) {
+      fprintf(stderr, "Error: out of memory\n");
+      return 1;
+    }
 
     /* init_gray_code resets the shared walk state; it must start every
        sequence, including one that follows an abandoned walk. */

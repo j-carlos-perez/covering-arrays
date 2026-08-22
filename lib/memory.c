@@ -1,5 +1,20 @@
 #include "memory.h"
+#include <stdint.h>
 #include <stdlib.h>
+
+static void *malloc_array(size_t count, size_t element_size) {
+  if (count == 0 || element_size == 0 || count > SIZE_MAX / element_size) {
+    return NULL;
+  }
+  return malloc(count * element_size);
+}
+
+static void *calloc_array(size_t count, size_t element_size) {
+  if (count == 0 || element_size == 0 || count > SIZE_MAX / element_size) {
+    return NULL;
+  }
+  return calloc(count, element_size);
+}
 
 /*
  * Allocates a 2D matrix of int with r rows and c columns.
@@ -11,12 +26,12 @@ int **get_matrix(size_t r, size_t c) {
   if (r == 0 || c == 0) {
     return NULL;
   }
-  int **m = (int **)malloc(r * sizeof(int *));
+  int **m = (int **)malloc_array(r, sizeof(int *));
   if (m == NULL) {
     return NULL;
   }
   for (size_t i = 0; i < r; i++) {
-    m[i] = (int *)malloc(c * sizeof(int));
+    m[i] = (int *)malloc_array(c, sizeof(int));
     if (m[i] == NULL) {
       for (size_t j = 0; j < i; j++) {
         free(m[j]);
@@ -37,7 +52,7 @@ int *get_vector(size_t r) {
   if (r == 0) {
     return NULL;
   }
-  return (int *)malloc(r * sizeof(int));
+  return (int *)malloc_array(r, sizeof(int));
 }
 
 /*
@@ -68,12 +83,13 @@ ca_count_t **get_matrix_count_calloc(size_t r, size_t c) {
   if (r == 0 || c == 0) {
     return NULL;
   }
-  ca_count_t **m = (ca_count_t **)malloc(r * sizeof(ca_count_t *));
+  ca_count_t **m =
+      (ca_count_t **)malloc_array(r, sizeof(ca_count_t *));
   if (m == NULL) {
     return NULL;
   }
   for (size_t i = 0; i < r; i++) {
-    m[i] = (ca_count_t *)calloc(c, sizeof(ca_count_t));
+    m[i] = (ca_count_t *)calloc_array(c, sizeof(ca_count_t));
     if (m[i] == NULL) {
       for (size_t j = 0; j < i; j++) {
         free(m[j]);
@@ -108,12 +124,12 @@ uint8_t **get_matrix_uint8(size_t r, size_t c) {
   if (r == 0 || c == 0) {
     return NULL;
   }
-  uint8_t **m = (uint8_t **)malloc(r * sizeof(uint8_t *));
+  uint8_t **m = (uint8_t **)malloc_array(r, sizeof(uint8_t *));
   if (m == NULL) {
     return NULL;
   }
   for (size_t i = 0; i < r; i++) {
-    m[i] = (uint8_t *)malloc(c * sizeof(uint8_t));
+    m[i] = (uint8_t *)malloc_array(c, sizeof(uint8_t));
     if (m[i] == NULL) {
       for (size_t j = 0; j < i; j++) {
         free(m[j]);
@@ -135,12 +151,12 @@ uint8_t **get_matrix_uint8_calloc(size_t r, size_t c) {
   if (r == 0 || c == 0) {
     return NULL;
   }
-  uint8_t **m = (uint8_t **)malloc(r * sizeof(uint8_t *));
+  uint8_t **m = (uint8_t **)malloc_array(r, sizeof(uint8_t *));
   if (m == NULL) {
     return NULL;
   }
   for (size_t i = 0; i < r; i++) {
-    m[i] = (uint8_t *)calloc(c, sizeof(uint8_t));
+    m[i] = (uint8_t *)calloc_array(c, sizeof(uint8_t));
     if (m[i] == NULL) {
       for (size_t j = 0; j < i; j++) {
         free(m[j]);
@@ -176,7 +192,7 @@ uint8_t *get_vector_uint8(size_t r) {
   if (r == 0) {
     return NULL;
   }
-  return (uint8_t *)malloc(r * sizeof(uint8_t));
+  return (uint8_t *)malloc_array(r, sizeof(uint8_t));
 }
 
 /*
@@ -188,7 +204,7 @@ uint8_t *get_vector_uint8_calloc(size_t r) {
   if (r == 0) {
     return NULL;
   }
-  return (uint8_t *)calloc(r, sizeof(uint8_t));
+  return (uint8_t *)calloc_array(r, sizeof(uint8_t));
 }
 
 /*
@@ -206,7 +222,7 @@ size_t *get_vector_size_t(size_t r) {
   if (r == 0) {
     return NULL;
   }
-  return (size_t *)malloc(r * sizeof(size_t));
+  return (size_t *)malloc_array(r, sizeof(size_t));
 }
 
 /*

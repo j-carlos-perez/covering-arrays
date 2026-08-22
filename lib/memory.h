@@ -25,10 +25,9 @@ typedef uint16_t ca_count_t;
 #define CA_COUNT_MAX UINT16_MAX
 
 /*
- * All allocators return NULL on failure (including a failed row of a matrix,
- * in which case the rows already taken are released first) and for zero-sized
- * requests -- a zero-row matrix hands back a pointer that cannot legally be
- * dereferenced, which is exactly what let out-of-range callers run off the end.
+ * All allocators return NULL on failure, when count * element-size would
+ * overflow size_t, and for zero-sized requests. If a matrix row allocation
+ * fails, the rows already allocated are released first.
  */
 /* r x c ints, uninitialised. The workhorse: column-set tables (IToC) are
    allocated with get_matrix(binomial(k,t), t). */
